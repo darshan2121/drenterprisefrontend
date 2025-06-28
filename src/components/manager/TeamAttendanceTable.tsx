@@ -82,7 +82,7 @@ export function TeamAttendanceTable({ teamMembers }: { teamMembers: TeamMember[]
             <TableHead>Name</TableHead>
             <TableHead className="hidden lg:table-cell">Email</TableHead>
             <TableHead className="hidden md:table-cell">Shift</TableHead>
-            <TableHead>Status</TableHead>
+            <TableHead>Status for Status</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
