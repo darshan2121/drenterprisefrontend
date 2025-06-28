@@ -1,0 +1,59 @@
+import express from 'express';
+import mongoose from 'mongoose';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import managerRoutes from './routes/manager.routes.js';
+// Import routes
+import adminRoutes from './routes/admin.routes.js';
+
+import employeeRoutes from './routes/employee.routes.js';
+import dashboardRoutes from "./routes/dashboard.routes.js";
+import attendenceRoutes from "./routes/attendence.routes.js"
+
+dotenv.config();
+const app = express();
+const PORT = process.env.PORT || 5000;
+const MONGO_URI = process.env.MONGODB_URI ;
+app.use(cors(
+    {
+        origin: '*', // Allow all origins, you can restrict this to specific domains
+        methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+        credentials: true,
+    }
+));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use("/static", express.static("upload"));
+
+// Connect to MongoDB
+mongoose.connect(MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+}).then(() => {
+  console.log('Connected to MongoDB');
+}).catch((err) => {
+  console.error('MongoDB connection error:', err);
+});
+
+app.use("/api/admin", adminRoutes);
+// Import other routes as needed
+app.use("/api/manager", managerRoutes); // Uncomment when manager routes are implemented
+
+app.use("/api/employee",employeeRoutes);
+
+app.use("/api/dashboard",dashboardRoutes)
+
+app.use("/api/attendence",attendenceRoutes)
+
+
+
+
+// Define a simple route
+app.get('/', (req, res) => {
+  res.send('Welcome to the Labor Management API');
+});
+
+// Start the server
+app.listen(PORT, () => {
+  console.log(`Server is running on http://localhost:${PORT}`);
+}); 

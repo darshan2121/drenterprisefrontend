@@ -1,0 +1,79 @@
+import Attendance from "../models/attendence.models.js";
+import Employee from "../models/employee.models.js";
+
+// Mark step in
+export const markStepIn = async (req, res) => {
+  try {
+    const { employeeId, managerId, longitude, latitude, address, note } = req.body;
+
+    // Check if there is already an open attendance for this employee
+    const openAttendance = await Attendance.findOne({ employeeId, stepOut: { $exists: false } });
+    if (openAttendance) {
+      return res.status(400).json({ message: "Already stepped in. Please step out before stepping in again." });
+    }
+
+    const stepIn = new Date();
+    const stepInImage = req.file ? req.file.filename : null;
+
+    const attendance = new Attendance({
+      employeeId,
+      managerId,
+      stepIn,
+      stepInImage,
+      longitude,
+      latitude,
+      address,
+      note
+    });
+
+    await attendance.save();
+    await Employee.findByIdAndUpdate(employeeId, { isWorking: true });
+    res.status(201).json({ message: "Step In marked", attendance });
+  } catch (error) {
+    console.error("Error marking step in:", error);
+    res.status(500).json({ message: "Error marking step in", error });
+  }
+};
+// Mark step out
+export const markStepOut = async (req, res) => {
+  try {
+    const { attendanceId, longitude, latitude, address, note } = req.body;
+    const stepOut = new Date();
+    const stepOutImage = req.file ? req.file.filename : null; // Save only the filename
+
+    const attendance = await Attendance.findById(attendanceId);
+    if (!attendance) {
+      return res.status(404).json({ message: "Attendance record not found" });
+    }
+
+    const totalTime = Math.round((stepOut - attendance.stepIn) / 60000);
+
+    attendance.stepOut = stepOut;
+    attendance.stepOutImage = stepOutImage;
+    attendance.longitude = longitude;
+    attendance.latitude = latitude;
+    attendance.address = address;
+    attendance.totalTime = totalTime;
+    attendance.note = note || attendance.note;
+
+    await attendance.save();
+     await Employee.findByIdAndUpdate(attendance.employeeId, { isWorking: false });
+    
+    res.status(200).json({ message: "Step Out marked", attendance });
+  } catch (error) {
+    console.error("Error marking step out:", error);
+    res.status(500).json({ message: "Error marking step out", error });
+  }
+};
+
+// Get all attendance for an employee
+export const getEmployeeAttendance = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    const attendance = await Attendance.find({ employeeId }).populate("employeeId").populate("managerId");
+    res.status(200).json({ attendance });
+  } catch (error) {
+    console.error("Error fetching attendance:", error);
+    res.status(500).json({ message: "Error fetching attendance", error });
+  }
+};
