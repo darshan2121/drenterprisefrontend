@@ -30,7 +30,9 @@ const managerSchema = new Schema({
  isActive:{
 type:Boolean,
 default:false
- }
+ },
+ otp: String,
+otpExpires: Date,
 }, {
   timestamps: true
 });

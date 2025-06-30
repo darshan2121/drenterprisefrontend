@@ -23,6 +23,14 @@ const adminSchema = new Schema({
         type: String,
         required: true,
     },
+      role: {
+    type: String,
+    enum: ["superadmin", "readonly"],
+    default: "superadmin"
+  },
+  otp: String,
+otpExpires: Date,
+
 },{
     timestamps: true
 });

@@ -2,13 +2,16 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import cron from "node-cron";
 import managerRoutes from './routes/manager.routes.js';
+import authRouter from "./routes/auth.routes.js";
 // Import routes
 import adminRoutes from './routes/admin.routes.js';
 
 import employeeRoutes from './routes/employee.routes.js';
 import dashboardRoutes from "./routes/dashboard.routes.js";
 import attendenceRoutes from "./routes/attendence.routes.js"
+import { autoStepOut } from './controller/cron.controller.js';
 
 dotenv.config();
 const app = express();
@@ -45,6 +48,10 @@ app.use("/api/dashboard",dashboardRoutes)
 
 app.use("/api/attendence",attendenceRoutes)
 
+app.use("/api/auth",authRouter)
+
+cron.schedule("*/30 * * * *", autoStepOut)
+
 
 
 
@@ -52,6 +59,8 @@ app.use("/api/attendence",attendenceRoutes)
 app.get('/', (req, res) => {
   res.send('Welcome to the Labor Management API');
 });
+
+
 
 // Start the server
 app.listen(PORT, () => {

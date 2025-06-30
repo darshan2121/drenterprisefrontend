@@ -9,12 +9,13 @@ import {
     getAllManagers,
     loginManager
 } from "../controller/manager.controller.js";   
+import { authenticateUser } from "../utils/middlewere.js";
 // Define routes
-router.post("/", createManager);    
+router.post("/",authenticateUser,createManager);    
 router.post("/login",loginManager)
-router.get("/all", getAllManagers);
-router.get("/:id", getManager);
-router.put("/:id", updateManager);  
-router.delete("/:id", deleteManager);
+router.get("/all",authenticateUser,getAllManagers);
+router.get("/:id",authenticateUser, getManager);
+router.put("/:id", authenticateUser,updateManager);  
+router.delete("/:id", authenticateUser,deleteManager);
 
 export default router;

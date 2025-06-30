@@ -69,11 +69,36 @@ export const markStepOut = async (req, res) => {
 // Get all attendance for an employee
 export const getEmployeeAttendance = async (req, res) => {
   try {
-    const { employeeId } = req.params;
-    const attendance = await Attendance.find({ employeeId }).populate("employeeId").populate("managerId");
+    const { employeeId, managerId, startDate, endDate, order = 'asc' } = req.query;
+
+    const query = {};
+
+    if (employeeId) {
+      query.employeeId = employeeId;
+    }
+
+    if (managerId) {
+      query.managerId = managerId;
+    }
+
+    if (startDate || endDate) {
+      query.createdAt = {}; // <-- changed from 'date' to 'createdAt'
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
+    }
+
+    const sortOrder = order === 'desc' ? -1 : 1;
+
+    const attendance = await Attendance.find(query)
+      .populate("employeeId")
+      .populate("managerId")
+      .sort({ createdAt: sortOrder }); // <-- sort on 'createdAt'
+
     res.status(200).json({ attendance });
   } catch (error) {
     console.error("Error fetching attendance:", error);
     res.status(500).json({ message: "Error fetching attendance", error });
   }
 };
+
+

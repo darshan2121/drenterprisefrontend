@@ -12,14 +12,15 @@ import {
   updateAdmin, 
   deleteAdmin 
 } from "../controller/admin.controller.js";    
+import { authenticateUser } from "../utils/middlewere.js";
 
 // Define routes
 router.post("/", createAdmin);
 router.post("/login", loginAdmin); 
-router.get("/all", getAllAdmins);
-router.get("/:id", getAdminById);
-router.put("/:id", updateAdmin);
-router.delete("/:id", deleteAdmin);
+router.get("/all", authenticateUser,getAllAdmins);
+router.get("/:id",authenticateUser, getAdminById);
+router.put("/:id",authenticateUser, updateAdmin);
+router.delete("/:id",authenticateUser, deleteAdmin);
 
 
 

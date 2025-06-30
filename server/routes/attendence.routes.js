@@ -5,6 +5,7 @@ import {
   markStepOut,
   getEmployeeAttendance
 } from "../controller/attendence.controller.js";
+import { authenticateUser } from "../utils/middlewere.js";
 
 const router = express.Router();
 
@@ -20,11 +21,11 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // Step in: upload single image
-router.post("/step-in", upload.single("stepInImage"), markStepIn);
+router.post("/step-in", authenticateUser,upload.single("stepInImage"), markStepIn);
 
 // Step out: upload single image
-router.post("/step-out", upload.single("stepOutImage"), markStepOut);
+router.post("/step-out", authenticateUser, markStepOut);
 
-router.get("/:employeeId", getEmployeeAttendance);
+router.get("/",authenticateUser, getEmployeeAttendance);
 
 export default router;
