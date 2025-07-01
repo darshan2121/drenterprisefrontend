@@ -12,12 +12,13 @@ import{
     deleteEmployee,
     getEmployees
 } from "../controller/employee.controller.js"
+import { authenticateUser } from "../utils/middlewere.js";
 
 
-router.post("/",createEmployee)
-router.put("/:id",updateEmployee)
-router.delete("/:id",deleteEmployee)
-router.get("/all",getEmployees)
+router.post("/",authenticateUser,createEmployee)
+router.put("/:id",authenticateUser,updateEmployee)
+router.delete("/:id",authenticateUser,deleteEmployee)
+router.get("/all",authenticateUser,getEmployees)
 
 
 

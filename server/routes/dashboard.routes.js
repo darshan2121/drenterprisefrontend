@@ -7,9 +7,10 @@ const Router = express.Router()
 import {
     getDashboardData
 } from "../controller/dashboard.controller.js";
+import { authenticateUser } from "../utils/middlewere.js";
 
 
-Router.get("/",getDashboardData)
+Router.get("/",authenticateUser,getDashboardData)
 
 
 

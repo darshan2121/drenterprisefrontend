@@ -95,26 +95,36 @@ export const getAllAdmins = async (req, res) => {
 export const loginAdmin = async (req, res) => {
   try {
     const { email, password } = req.body;
-    console.log("Login attempt with email:", email, " and password:", password);
+
     if (!email || !password) {
       return res.status(400).json({ message: "Email and password are required" });
     }
-    const admin = await Admin.findOne({ email }); 
-    console.log("Found admin:", admin);
+
+    const admin = await Admin.findOne({ email });
     if (!admin) {
       return res.status(404).json({ message: "Admin not found" });
-    }   
+    }
+
     const isPasswordValid = await bcrypt.compare(password, admin.password);
-    console.log("Password valid:", isPasswordValid);
     if (!isPasswordValid) {
-        return res.status(401).json({ message: "Invalid password" });
-        }
-    const token = jwt.sign({ id: admin._id, email: admin.email },JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '1y' });
-    console.log("Generated token:", token);
+      return res.status(401).json({ message: "Invalid password" });
+    }
+
+    // Include role and userType in the token
+    const token = jwt.sign(
+      {
+        id: admin._id,
+        email: admin.email,
+        role: admin.role,         // "superadmin" or "readonly"
+        userType: "admin"
+      },
+      JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || "1y" }
+    );
+
     res.status(200).json({ message: "Login successful", token, admin });
   } catch (error) {
     console.error("Error logging in:", error);
     res.status(500).json({ message: "Error logging in", error });
   }
-
-}
+};
