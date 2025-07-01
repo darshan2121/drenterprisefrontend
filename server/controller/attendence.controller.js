@@ -72,13 +72,21 @@ export const getEmployeeAttendance = async (req, res) => {
     const { employeeId, managerId, startDate, endDate, order = 'asc' } = req.query;
 
     const query = {};
+    const userData=req.user
+
+if(userData){
+    if (userData.userType=="manager") {
+      query.managerId = userData.id;
+    }
+    else if(managerId){
+      query.managerId = managerId;
+    }
+
+
+}
 
     if (employeeId) {
       query.employeeId = employeeId;
-    }
-
-    if (managerId) {
-      query.managerId = managerId;
     }
 
     if (startDate || endDate) {

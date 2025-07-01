@@ -61,9 +61,16 @@ export const deleteEmployee = async (req, res) => {
 export const getEmployees = async (req, res) => {
   try {
     const { isWorking,shift } = req.query;
+    const userData= req?.user
+    console.log("userData---->",userData)
 
     // Build aggregation pipeline
     const pipeline = [];
+    
+       if(userData.userType=="manager"){
+         pipeline.push({ $match: { managerId: userData.id } });
+    }
+    
 
     // Filter by shift if isWorking param is provided
     if (typeof isWorking !== "undefined") {
@@ -71,6 +78,8 @@ export const getEmployees = async (req, res) => {
         pipeline.push({ $match: { isWorking: isWorking } });
       
     }
+
+ 
     if(shift){
          pipeline.push({ $match: { shift: shift } });
     }

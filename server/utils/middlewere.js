@@ -14,7 +14,7 @@ export const authenticateUser = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
+console.log("decoded",decoded)
     let user;
     if (decoded.userType === "admin") {
       user = await Admin.findById(decoded.id);
@@ -37,6 +37,8 @@ export const authenticateUser = async (req, res, next) => {
       return res.status(403).json({ message: "Read-only admin cannot modify data" });
     }
 
+
+   
     next();
   } catch (err) {
     console.error("Auth error:", err);

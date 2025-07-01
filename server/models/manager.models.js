@@ -23,6 +23,10 @@ const managerSchema = new Schema({
     type: String,
     required: true,
   },
+  userType:{
+type:String,
+default:"manager"
+  },
  createdBy:{
   type:Schema.Types.ObjectId,
   ref:"Admin"

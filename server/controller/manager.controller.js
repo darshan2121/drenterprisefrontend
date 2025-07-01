@@ -88,7 +88,7 @@ export const loginManager = async (req, res) => {
     if (!isPasswordValid) {
       return res.status(401).json({ message: "Invalid password" });
     }       
-    const token = jwt.sign({ id: manager._id, email: manager.email }, JWT_SECRET, { expiresIn: '1y' });
+    const token = jwt.sign({ id: manager._id, email: manager.email,userType:manager.userType }, JWT_SECRET, { expiresIn: '1y' });
     res.status(200).json({ message: "Login successful", token, manager });
     }
     catch (error) {
