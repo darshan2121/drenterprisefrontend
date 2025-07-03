@@ -5,7 +5,7 @@ export default function Loading() {
     <div className="flex items-center justify-center min-h-screen bg-background/80 backdrop-blur-sm fixed inset-0 z-50">
       <div className="animate-pulse">
         <Image 
-          src="https://i.postimg.cc/VvNcC0Cw/image-removebg-preview-1.png" 
+          src="/dr-enterprise-logo.png" 
           alt="D.R. Enterprise Logo" 
           width={150} 
           height={150} 

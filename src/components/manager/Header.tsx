@@ -16,14 +16,25 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import Image from "next/image";
+import { useEffect, useState } from "react";
 
 export function Header() {
+  const [managerName, setManagerName] = useState<string>("");
+  const [managerEmail, setManagerEmail] = useState<string>("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setManagerName(localStorage.getItem("managerName") || "");
+      setManagerEmail(localStorage.getItem("managerEmail") || "");
+    }
+  }, []);
+
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center">
         <div className="mr-auto flex">
           <Link href="/manager/dashboard" className="flex items-center space-x-2">
-            <Image src="https://i.postimg.cc/VvNcC0Cw/image-removebg-preview-1.png" alt="D.R. Enterprise Logo" width={128} height={128} className="h-10 w-10" />
+            <Image src="/dr-enterprise-logo.png" alt="D.R. Enterprise Logo" width={128} height={128} className="h-10 w-10" />
             <span className="font-bold sm:hidden">D.R. Enterprise</span>
           </Link>
         </div>
@@ -34,9 +45,9 @@ export function Header() {
                 <AvatarFallback>M</AvatarFallback>
               </Avatar>
               <div className="flex-col hidden sm:flex">
-                <span className="text-sm font-semibold">Jane Roe</span>
+                <span className="text-sm font-semibold">{managerName || "Manager"}</span>
                 <span className="text-xs text-muted-foreground">
-                  manager@example.com
+                  {managerEmail || "manager@example.com"}
                 </span>
               </div>
             </div>

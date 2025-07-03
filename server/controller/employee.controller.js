@@ -5,12 +5,16 @@ import Employee from "../models/employee.models.js";
 export const createEmployee = async (req, res) => {
     try {
         const { email, name, mobile, address, managerId, shift,createdBy,isCreatedByAdmin } = req.body;
+        // Log the incoming payload for debugging
+        // console.log('[CREATE EMPLOYEE] Payload:', req.body);
         // Validate required fields
         if (!email || !name || !mobile || !address || !managerId || !shift || !isCreatedByAdmin || !createdBy) {
             return res.status(400).json({ message: "All fields are required" });
         }
         const newEmployee = new Employee({ email, name, mobile, address, managerId, shift, createdBy , isCreatedByAdmin });
         await newEmployee.save();
+        // Log the saved employee for debugging
+        // console.log('[CREATE EMPLOYEE] Saved Employee:', newEmployee);
         res.status(201).json({ message: "Employee created successfully", employee: newEmployee });
     } catch (error) {
         if (error.code === 11000) {

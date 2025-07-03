@@ -4,6 +4,7 @@ import Employee from "../models/employee.models.js";
 // Mark step in
 export const markStepIn = async (req, res) => {
   try {
+    // console.log("[DEBUG] markStepIn request body:", req.body);
     const { employeeId, managerId, longitude, latitude, address, note } = req.body;
 
     // Check if there is already an open attendance for this employee
@@ -37,6 +38,9 @@ export const markStepIn = async (req, res) => {
 // Mark step out
 export const markStepOut = async (req, res) => {
   try {
+    if (!req.body || !req.body.attendanceId) {
+      return res.status(400).json({ message: "attendanceId is required" });
+    }
     const { attendanceId, longitude, latitude, address, note } = req.body;
     const stepOut = new Date();
     const stepOutImage = req.file ? req.file.filename : null; // Save only the filename
@@ -69,43 +73,32 @@ export const markStepOut = async (req, res) => {
 // Get all attendance for an employee
 export const getEmployeeAttendance = async (req, res) => {
   try {
-    const { employeeId, managerId, startDate, endDate, order = 'asc' } = req.query;
-
-    const query = {};
-    const userData=req.user
-
-if(userData){
-    if (userData.userType=="manager") {
-      query.managerId = userData.id;
+    const { employeeId } = req.params;
+    if (!employeeId) {
+      return res.status(400).json({ message: "employeeId is required in params" });
     }
-    else if(managerId){
-      query.managerId = managerId;
-    }
-
-
-}
-
-    if (employeeId) {
-      query.employeeId = employeeId;
-    }
-
-    if (startDate || endDate) {
-      query.createdAt = {}; // <-- changed from 'date' to 'createdAt'
-      if (startDate) query.createdAt.$gte = new Date(startDate);
-      if (endDate) query.createdAt.$lte = new Date(endDate);
-    }
-
-    const sortOrder = order === 'desc' ? -1 : 1;
-
-    const attendance = await Attendance.find(query)
+    const attendance = await Attendance.find({ employeeId })
       .populate("employeeId")
       .populate("managerId")
-      .sort({ createdAt: sortOrder }); // <-- sort on 'createdAt'
-
+      .sort({ createdAt: 1 });
     res.status(200).json({ attendance });
   } catch (error) {
     console.error("Error fetching attendance:", error);
     res.status(500).json({ message: "Error fetching attendance", error });
+  }
+};
+
+// Get all attendance records (for admin reports)
+export const getAllAttendance = async (req, res) => {
+  try {
+    const attendance = await Attendance.find({})
+      .populate("employeeId")
+      .populate("managerId")
+      .sort({ createdAt: 1 });
+    res.status(200).json({ attendance });
+  } catch (error) {
+    console.error("Error fetching all attendance:", error);
+    res.status(500).json({ message: "Error fetching all attendance", error });
   }
 };
 

@@ -14,6 +14,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { ClockInModal } from "./ClockInModal";
 import { Avatar, AvatarImage, AvatarFallback } from "../ui/avatar";
 import { cn } from "@/lib/utils";
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchAttendanceId } from '@/store/slices/attendanceSlice';
 
 type TeamMember = {
     id: string;
@@ -25,6 +29,21 @@ type TeamMember = {
 
 export function TeamAttendanceTable({ teamMembers }: { teamMembers: TeamMember[] }) {
   const isMobile = useIsMobile();
+  const dispatch = useDispatch();
+  const attendanceIds = useSelector((state: any) => state.attendance.attendanceIds || {});
+
+  useEffect(() => {
+    teamMembers.forEach((member) => {
+      if (!attendanceIds[member.id]) {
+        dispatch(fetchAttendanceId(member.id) as any);
+      }
+    });
+  }, [teamMembers, attendanceIds, dispatch]);
+
+  // Helper to update attendanceId for a member after clock in/out
+  const handleAttendanceChange = (memberId: string, newAttendanceId: string | null) => {
+    dispatch(fetchAttendanceId(memberId) as any);
+  };
 
   const getStatusVariant = (status: TeamMember['status']) => {
     switch(status) {
@@ -38,7 +57,7 @@ export function TeamAttendanceTable({ teamMembers }: { teamMembers: TeamMember[]
   if (isMobile) {
     return (
       <div className="space-y-3 px-1">
-        {teamMembers.map((member) => (
+        {teamMembers.length>0&&teamMembers.map((member) => (
           <Card key={member.id} className="shadow-sm border-border">
             <CardHeader className="pb-3">
                 <div className="flex justify-between items-start gap-3">
@@ -64,7 +83,12 @@ export function TeamAttendanceTable({ teamMembers }: { teamMembers: TeamMember[]
                   <span className="font-medium">{member.shift}</span>
                 </div>
                 <div className="flex justify-end pt-2">
-                  <ClockInModal employeeName={member.name} />
+                    <ClockInModal 
+                      employee={{ name: member.name, id: member.id }} 
+                      attendanceId={attendanceIds[member.id]}
+                      status={member.status}
+                      onAttendanceChange={(newId) => handleAttendanceChange(member.id, newId)}
+                    />
                 </div>
               </div>
             </CardContent>
@@ -104,7 +128,12 @@ export function TeamAttendanceTable({ teamMembers }: { teamMembers: TeamMember[]
                 </Badge>
               </TableCell>
               <TableCell className="text-right">
-                <ClockInModal employeeName={member.name} />
+                  <ClockInModal 
+                    employee={{ name: member.name, id: member.id }} 
+                    attendanceId={attendanceIds[member.id]}
+                    status={member.status}
+                    onAttendanceChange={(newId) => handleAttendanceChange(member.id, newId)}
+                  />
               </TableCell>
             </TableRow>
           ))}

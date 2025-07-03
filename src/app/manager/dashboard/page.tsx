@@ -1,42 +1,60 @@
+"use client";
+
+
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Users, LogIn, LogOut, FileText } from "lucide-react";
 import { TeamAttendanceTable } from "@/components/manager/TeamAttendanceTable";
-
-const metrics = [
-    {
-        icon: Users,
-        label: "Total Employees",
-        value: "15",
-        color: "text-chart-1",
-    },
-    {
-        icon: LogIn,
-        label: "Clocked In",
-        value: "12",
-        color: "text-chart-2",
-    },
-    {
-        icon: LogOut,
-        label: "On Leave",
-        value: "3",
-        color: "text-chart-4",
-    },
-    {
-        icon: FileText,
-        label: "Total Documents",
-        value: "27",
-        color: "text-chart-5",
-    },
-];
-
-const teamMembers = [
-    { id: 'EMP001', name: 'Alice Johnson', email: 'alice.j@example.com', status: 'Clocked In', shift: '9 AM - 5 PM' },
-    { id: 'EMP003', name: 'Charlie Brown', email: 'charlie.b@example.com', status: 'Clocked In', shift: '9 AM - 5 PM' },
-    { id: 'EMP005', name: 'Ethan Hunt', email: 'ethan.h@example.com', status: 'On Leave', shift: '1 PM - 9 PM' },
-    { id: 'EMP006', name: 'Fiona Glenanne', email: 'fiona.g@example.com', status: 'Clocked Out', shift: '9 AM - 5 PM' },
-];
+import { useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { fetchEmployees } from "@/store/slices/employeeSlice";
+import Image from "next/image";
 
 export default function ManagerDashboardPage() {
+    const dispatch = useDispatch();
+    const { employees, isLoading } = useSelector((state: any) => state.employee);
+
+    // Compute metrics from employees
+    const metrics = [
+        {
+            icon: Users,
+            label: "Total Employees",
+            value: employees.length,
+            color: "text-chart-1",
+        },
+        {
+            icon: LogIn,
+            label: "Clocked In",
+            value: employees.filter((e: any) => e.isWorking).length,
+            color: "text-chart-2",
+        },
+        {
+            icon: LogOut,
+            label: "On Leave",
+            value: employees.filter((e: any) => !e.isWorking).length,
+            color: "text-chart-4",
+        },
+        {
+            icon: FileText,
+            label: "Total Documents",
+            value: "-",
+            color: "text-chart-5",
+        },
+    ];
+
+    const mappedEmployees = employees.map((e: any) => ({
+        id: e._id,
+        name: e.name,
+        email: e.email,
+        status: e.isWorking ? 'Clocked In' : 'On Leave',
+        shift: e.shift || '-',
+        isActive: e.isWorking,
+        // include any other fields you need
+    }));
+
+    useEffect(() => {
+        dispatch(fetchEmployees() as any);
+    }, [dispatch]);
+
     return (
         <div className="flex flex-col gap-6">
             <div>
@@ -65,7 +83,13 @@ export default function ManagerDashboardPage() {
             <div className="flex flex-col gap-6">
                 <h2 className="text-2xl font-bold font-headline">Team Attendance</h2>
                 <Card className="shadow-sm">
-                    <TeamAttendanceTable teamMembers={teamMembers} />
+                    {isLoading ? (
+                        <div className="p-8 text-center flex justify-center">
+                            <Image src="/dr-enterprise-logo.png" alt="D.R. Enterprise Logo" width={80} height={80} className="mx-auto animate-pulse" />
+                        </div>
+                    ) : (
+                        <TeamAttendanceTable teamMembers={mappedEmployees} />
+                    )}
                 </Card>
             </div>
         </div>

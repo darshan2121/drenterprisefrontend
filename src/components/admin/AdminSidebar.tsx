@@ -42,7 +42,7 @@ const menuItems = [
 
 export function AdminSidebar() {
   const pathname = usePathname();
-  const { state } = useSidebar();
+  const { state, setOpenMobile, isMobile } = useSidebar();
 
   return (
     <>
@@ -52,7 +52,7 @@ export function AdminSidebar() {
           state === "expanded" ? "justify-between" : "justify-center"
         )}>
             <div className={cn("flex items-center gap-3", state === 'collapsed' && "hidden")}>
-                <Image src="https://i.postimg.cc/VvNcC0Cw/image-removebg-preview-1.png" alt="D.R. Enterprise Logo" width={40} height={40} className="h-10 w-10" />
+                <Image src="/dr-enterprise-logo.png" alt="D.R. Enterprise Logo" width={40} height={40} className="h-10 w-10" />
                 <div className="flex flex-col">
                     <span className="font-bold">D.R Enterprise</span>
                     <span className="text-xs text-muted-foreground">Admin Panel</span>
@@ -69,8 +69,14 @@ export function AdminSidebar() {
                 asChild
                 isActive={pathname.startsWith(item.href)}
                 tooltip={item.label}
+                className={pathname.startsWith(item.href) ? "bg-primary/10 text-primary" : ""}
               >
-                <Link href={item.href}>
+                <Link
+                  href={item.href}
+                  onClick={() => {
+                    if (isMobile) setOpenMobile(false);
+                  }}
+                >
                   <item.icon />
                   <span>{item.label}</span>
                 </Link>

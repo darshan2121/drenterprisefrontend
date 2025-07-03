@@ -26,40 +26,57 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
+import { useToast } from "@/hooks/use-toast";
+import { useSelector, useDispatch } from "react-redux";
+import { fetchManagers, removeManager, Manager } from "@/store/slices/managerSlice";
+import type { AppDispatch } from "@/store";
 
-type Manager = { id: string; name: string; email: string; teamSize: number; status: 'Active' | 'Inactive'; location: string; };
-
-export function ManagersList({ managers }: { managers: Manager[] }) {
+export function ManagersList() {
+  const { managers, isLoading, error } = useSelector((state: any) => state.manager);
   const isMobile = useIsMobile();
-  
-  const getStatusVariant = (status: Manager['status']) => {
+  const { toast } = useToast();
+  const dispatch = useDispatch<AppDispatch>();
+
+  const getStatusVariant = (status: string) => {
     return status === 'Active' ? 'default' : 'secondary';
-  }
+  };
+
+  const handleDelete = async (manager: Manager) => {
+    try {
+      await dispatch(removeManager({ id: manager._id, body: { name: manager.name, email: manager.email } }) as any).unwrap();
+      toast({ title: "Deleted", description: `Manager ${manager.name} deleted.` });
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to delete manager.", variant: "destructive" });
+    }
+  };
+
+  if (isLoading) return <div className="p-8 text-center text-muted-foreground">Loading managers...</div>;
+  if (error) return <div className="p-8 text-center text-destructive">{error}</div>;
 
   if (isMobile) {
     return (
       <div className="space-y-4 p-4 md:p-0">
-        {managers.map((manager) => (
-          <Card key={manager.id} className="shadow-md">
-            <CardHeader className="flex flex-row items-start justify-between">
-                <div className="flex items-center gap-4">
-                    <Avatar>
-                        <AvatarImage src={`https://i.postimg.cc/VvNcC0Cw/image-removebg-preview-1.png`} data-ai-hint="person" />
-                        <AvatarFallback>{manager.name.charAt(0)}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                        <CardTitle>{manager.name}</CardTitle>
-                        <CardDescription>{manager.email}</CardDescription>
-                    </div>
+        {managers.map((manager: Manager) => (
+          <Card key={manager._id} className="shadow-md">
+            <CardHeader className="pb-2 flex flex-row items-start justify-between">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-10 w-10">
+                  <AvatarImage src={`/dr-enterprise-logo.png`} data-ai-hint="person" />
+                  <AvatarFallback>{manager.name.charAt(0)}</AvatarFallback>
+                </Avatar>
+                <div>
+                  <CardTitle className="text-base font-bold leading-tight">{manager.name}</CardTitle>
+                  <CardDescription className="text-xs">{manager.email}</CardDescription>
                 </div>
-                <Badge variant={getStatusVariant(manager.status)} className="w-fit">{manager.status}</Badge>
+              </div>
+              <Badge variant={getStatusVariant(manager.status || (manager.isActive ? 'Active' : 'Inactive'))} className="w-fit text-xs px-2 py-1">{manager.status || (manager.isActive ? 'Active' : 'Inactive')}</Badge>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <p><strong className="text-muted-foreground">Team Size:</strong> {manager.teamSize}</p>
-              <p><strong className="text-muted-foreground">Location:</strong> {manager.location}</p>
-              <div className="flex gap-2 pt-2">
+            <CardContent className="space-y-1 text-sm pb-2">
+              <p><strong className="text-muted-foreground">Team Size:</strong> {manager.teamSize ?? ''}</p>
+              <p><strong className="text-muted-foreground">Location:</strong> {manager.location || manager.address || ''}</p>
+              <div className="flex gap-2 pt-2 justify-end">
                 <EditManagerModal manager={manager} />
-                <DeleteAction managerName={manager.name} />
+                <DeleteAction manager={manager} onDelete={handleDelete} />
               </div>
             </CardContent>
           </Card>
@@ -82,27 +99,27 @@ export function ManagersList({ managers }: { managers: Manager[] }) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {managers.map((manager) => (
-            <TableRow key={manager.id}>
+          {managers.map((manager: Manager) => (
+           <TableRow key={manager._id}>
               <TableCell className="font-medium flex items-center gap-3">
                 <Avatar>
-                    <AvatarImage src={`https://i.postimg.cc/VvNcC0Cw/image-removebg-preview-1.png`} data-ai-hint="person" />
+                    <AvatarImage src={`/dr-enterprise-logo.png`} data-ai-hint="person" />
                     <AvatarFallback>{manager.name.charAt(0)}</AvatarFallback>
                 </Avatar>
                 {manager.name}
               </TableCell>
               <TableCell className="hidden lg:table-cell text-muted-foreground">{manager.email}</TableCell>
-              <TableCell className="hidden md:table-cell text-muted-foreground">{manager.teamSize}</TableCell>
-              <TableCell className="hidden md:table-cell text-muted-foreground">{manager.location}</TableCell>
+              <TableCell className="hidden md:table-cell text-muted-foreground">{manager.teamSize ?? ''}</TableCell>
+              <TableCell className="hidden md:table-cell text-muted-foreground">{manager.location || manager.address || ''}</TableCell>
               <TableCell>
-                <Badge variant={getStatusVariant(manager.status)}>
-                  {manager.status}
+                <Badge variant={getStatusVariant(manager.status || (manager.isActive ? 'Active' : 'Inactive'))}>
+                  {manager.status || (manager.isActive ? 'Active' : 'Inactive')}
                 </Badge>
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex gap-1 justify-end">
                   <EditManagerModal manager={manager} />
-                  <DeleteAction managerName={manager.name} />
+                  <DeleteAction manager={manager} onDelete={handleDelete} />
                 </div>
               </TableCell>
             </TableRow>
@@ -113,7 +130,7 @@ export function ManagersList({ managers }: { managers: Manager[] }) {
   );
 }
 
-function DeleteAction({ managerName }: { managerName: string }) {
+function DeleteAction({ manager, onDelete }: { manager: Manager, onDelete: (manager: Manager) => void }) {
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
@@ -125,12 +142,12 @@ function DeleteAction({ managerName }: { managerName: string }) {
         <AlertDialogHeader>
           <AlertDialogTitle>Are you sure?</AlertDialogTitle>
           <AlertDialogDescription>
-            This action cannot be undone. This will permanently delete the manager record for {managerName}.
+            This action cannot be undone. This will permanently delete the manager record for {manager.name}.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction variant="destructive">Delete</AlertDialogAction>
+          <AlertDialogAction onClick={() => onDelete(manager)}>Delete</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

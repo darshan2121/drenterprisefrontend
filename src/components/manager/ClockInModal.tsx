@@ -18,19 +18,39 @@ import Image from "next/image";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
+import { useDispatch, useSelector } from 'react-redux';
+import { clockIn, clockOut, fetchAttendanceId } from '@/store/slices/attendanceSlice';
 
-export function ClockInModal({ employeeName }: { employeeName: string }) {
+export function ClockInModal({ employee, attendanceId: propAttendanceId, status, onAttendanceChange }: {
+  employee: { name: string; id: string };
+  attendanceId?: string | null;
+  status: 'Clocked In' | 'Clocked Out' | 'On Leave';
+  onAttendanceChange?: (newId: string | null) => void;
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [step, setStep] = useState<"idle" | "capturing" | "preview" | "verifying" | "result">("idle");
   const [photoDataUri, setPhotoDataUri] = useState<string | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [verificationResult, setVerificationResult] = useState<VerifyClockInOutput | null>(null);
   const [manualLocation, setManualLocation] = useState('');
+  const [note, setNote] = useState('');
+  const [latitude, setLatitude] = useState<string>('');
+  const [longitude, setLongitude] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const attendanceIdFromRedux = useSelector((state: any) => state.attendance.attendanceIds[employee.id] || null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const dispatch = useDispatch();
+  const { isClockingIn, isClockingOut, error: attendanceError } = useSelector((state: any) => state.attendance);
+
+  // Debug log for attendanceId
+  console.log("[DEBUG] ClockInModal for", employee.name, "employeeId:", employee.id, "attendanceId from Redux:", attendanceIdFromRedux);
+
+  // Add a loading state for attendanceId
+  const isAttendanceIdLoading = attendanceIdFromRedux === null;
 
   const stopCamera = useCallback(() => {
     if (stream) {
@@ -45,8 +65,10 @@ export function ClockInModal({ employeeName }: { employeeName: string }) {
     setPhotoDataUri(null);
     setVerificationResult(null);
     setManualLocation('');
+    setNote('');
+    setLatitude('');
+    setLongitude('');
   }, [stopCamera]);
-
 
   useEffect(() => {
     // Cleanup camera on unmount
@@ -54,6 +76,36 @@ export function ClockInModal({ employeeName }: { employeeName: string }) {
       stopCamera();
     };
   }, [stopCamera]);
+
+  useEffect(() => {
+    if (isOpen) {
+      console.log("[DEBUG] Modal opened for", employee.name, "employeeId:", employee.id);
+      // Get geolocation
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            setLatitude(position.coords.latitude.toString());
+            setLongitude(position.coords.longitude.toString());
+          },
+          (error) => {
+            toast({
+              variant: "destructive",
+              title: "Location Error",
+              description: "Could not get your location. Please allow location access.",
+            });
+          }
+        );
+      }
+      // Fetch current attendance status from Redux
+      dispatch(fetchAttendanceId(employee.id) as any);
+    }
+  }, [isOpen, toast, employee.id, dispatch]);
+
+  // Notify parent on attendanceId change
+  useEffect(() => {
+    if (onAttendanceChange) onAttendanceChange(attendanceIdFromRedux);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attendanceIdFromRedux]);
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
@@ -134,39 +186,110 @@ export function ClockInModal({ employeeName }: { employeeName: string }) {
     fileInputRef.current?.click();
   };
   
+  // Helper to convert data URI to File
+  function dataURItoFile(dataURI: string, filename: string) {
+    const arr = dataURI.split(',');
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    if (!mimeMatch) throw new Error('Invalid data URI');
+    const mime = mimeMatch[1];
+    const bstr = atob(arr[1]);
+    const n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    for (let i = 0; i < n; i++) u8arr[i] = bstr.charCodeAt(i);
+    return new File([u8arr], filename, { type: mime });
+  }
+
   const handleClockIn = async () => {
     if (!photoDataUri) return;
-
     const clockInLocation = manualLocation.trim();
-
     if (!clockInLocation) {
-        toast({
-            variant: "destructive",
-            title: "Location Required",
-            description: "Please enter your location manually.",
-        });
-        return;
-    }
-
-    setStep("verifying");
-
-    try {
-      const result = await verifyClockIn({
-        photoDataUri,
-        currentLocation: clockInLocation,
-        employeeName,
-      });
-      
-      setVerificationResult(result);
-      setStep("result");
-    } catch (error) {
-      console.error("Verification failed:", error);
       toast({
         variant: "destructive",
-        title: "Verification Failed",
-        description: "An error occurred during verification. Please try again.",
+        title: "Location Required",
+        description: "Please enter your location manually.",
       });
-      setStep("preview");
+      return;
+    }
+    if (!latitude || !longitude) {
+      toast({
+        variant: "destructive",
+        title: "Location Error",
+        description: "Could not get your current location.",
+      });
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append('stepInImage', dataURItoFile(photoDataUri, 'stepin.jpg'));
+      formData.append('longitude', longitude);
+      formData.append('latitude', latitude);
+      formData.append('address', clockInLocation);
+      formData.append('note', note);
+      formData.append("employeeId", employee.id);
+      // Only append managerId from localStorage if needed
+      const managerId = typeof window !== 'undefined' ? localStorage.getItem('managerId') : '';
+      if (managerId) formData.append('managerId', managerId);
+      const resultAction = await dispatch(clockIn(formData) as any);
+      if (clockIn.fulfilled.match(resultAction)) {
+        const data = resultAction.payload;
+        toast({
+          title: 'Success!',
+          description: 'Step In marked successfully.',
+        });
+        if (data.attendance && data.attendance._id) {
+          if (typeof window !== 'undefined') localStorage.setItem(`attendanceId_${employee.id}`, data.attendance._id);
+          if (onAttendanceChange) onAttendanceChange(data.attendance._id);
+        }
+        setStep('result');
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Clock In Failed',
+          description: attendanceError || 'Failed to clock in.',
+        });
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleClockOut = async () => {
+    console.log("[DEBUG] Attempting clock out for", employee.name, "attendanceId:", attendanceIdFromRedux);
+    if (!attendanceIdFromRedux) {
+      toast({
+        variant: 'destructive',
+        title: 'Clock Out Failed',
+        description: 'No attendanceId found. Please clock in first.',
+      });
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const formData = new FormData();
+      formData.append('longitude', longitude || '0');
+      formData.append('latitude', latitude || '0');
+      formData.append('address', 'Auto clock out');
+      formData.append('note', 'Clock out via button');
+      formData.append('stepOut', new Date().toISOString());
+      formData.append('attendanceId', attendanceIdFromRedux);
+      const resultAction = await dispatch(clockOut(formData) as any);
+      if (clockOut.fulfilled.match(resultAction)) {
+        toast({
+          title: 'Success!',
+          description: 'Clock out successful.',
+        });
+        if (typeof window !== 'undefined') localStorage.removeItem(`attendanceId_${employee.id}`);
+        setIsOpen(false);
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Clock Out Failed',
+          description: attendanceError || 'Failed to clock out.',
+        });
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -181,6 +304,27 @@ export function ClockInModal({ employeeName }: { employeeName: string }) {
   }
   
   const renderContent = () => {
+    // If user is already clocked in, show simple clock out option
+    if (attendanceIdFromRedux) {
+      return (
+        <div className="my-4 w-full h-64 sm:aspect-square rounded-lg bg-muted flex items-center justify-center overflow-hidden">
+          <div className="text-center text-muted-foreground flex flex-col items-center gap-4">
+            <UserCheck className="h-12 w-12" />
+            <p>Ready to clock out?</p>
+            <Button 
+              onClick={handleClockOut} 
+              disabled={isSubmitting || isAttendanceIdLoading}
+              className="w-full max-w-xs"
+            >
+              {(isSubmitting || isAttendanceIdLoading) ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Clock Out
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    // Original clock in flow
     switch(step) {
         case 'idle':
             return (
@@ -215,6 +359,17 @@ export function ClockInModal({ employeeName }: { employeeName: string }) {
                                     onChange={(e) => setManualLocation(e.target.value)}
                                     placeholder="e.g., Main Office, Client Site"
                                 />
+                                <Label htmlFor="note">Note</Label>
+                                <Input
+                                    id="note"
+                                    value={note}
+                                    onChange={e => setNote(e.target.value)}
+                                    placeholder="e.g., clean all area"
+                                />
+                                <div className="flex gap-2 text-xs text-muted-foreground">
+                                    <span>Latitude: {latitude || '...'}</span>
+                                    <span>Longitude: {longitude || '...'}</span>
+                                </div>
                             </CardContent>
                         </Card>
                     </div>
@@ -257,12 +412,12 @@ export function ClockInModal({ employeeName }: { employeeName: string }) {
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button size="sm">Clock In</Button>
+        <Button size="sm">{status === 'Clocked In' ? 'Clock Out' : 'Clock In'}</Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Clock-In for {employeeName}</DialogTitle>
-          <DialogDescription>
+        <DialogTitle>{status === 'Clocked In' ? 'Clock-Out' : 'Clock-In'} for {employee.name}</DialogTitle>
+            <DialogDescription>
             Verify your identity and confirm your location.
           </DialogDescription>
         </DialogHeader>
@@ -288,7 +443,15 @@ export function ClockInModal({ employeeName }: { employeeName: string }) {
             {step === 'preview' && (
                 <div className="w-full flex flex-col gap-2">
                     <Button onClick={() => { setStep('idle'); resetState(); }} variant="outline" className="w-full"><RefreshCcw className="mr-2 h-4 w-4" />Start Over</Button>
-                    <Button onClick={handleClockIn} className="w-full" disabled={isClockInDisabled()}><UserCheck className="mr-2 h-4 w-4" />Confirm & Clock In</Button>
+                    {!attendanceIdFromRedux ? (
+                      <Button onClick={handleClockIn} className="w-full" disabled={isClockInDisabled() || isSubmitting}>
+                        {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserCheck className="mr-2 h-4 w-4" />}Confirm & Clock In
+                      </Button>
+                    ) : (
+                      <Button onClick={handleClockOut} className="w-full" disabled={isClockInDisabled() || isSubmitting}>
+                        {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserCheck className="mr-2 h-4 w-4" />}Confirm & Clock Out
+                      </Button>
+                    )}
                 </div>
             )}
             {step === 'result' && <Button onClick={() => handleOpenChange(false)} className="w-full">Done</Button>}

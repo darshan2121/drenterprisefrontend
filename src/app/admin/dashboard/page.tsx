@@ -7,56 +7,17 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
-
-const metrics = [
-  {
-    icon: Users,
-    label: "Total Users",
-    value: "1,234",
-    growth: "+12%",
-    color: "text-emerald-500",
-  },
-  {
-    icon: UserCog,
-    label: "Total Managers",
-    value: "56",
-    growth: "+5%",
-    color: "text-emerald-500",
-  },
-  {
-    icon: Briefcase,
-    label: "Total Employees",
-    value: "1,178",
-    growth: "+8%",
-    color: "text-emerald-500",
-  },
-    {
-    icon: Activity,
-    label: "Active Today",
-    value: "892",
-    growth: "+2%",
-    color: "text-emerald-500",
-  },
-];
-
-const recentActivity = [
-  { name: 'John Doe', action: 'clocked in', time: '9:00 AM', status: 'success' as const },
-  { name: 'Jane Smith', action: 'requested leave', time: '8:45 AM', status: 'pending' as const },
-  { name: 'Mike Johnson', action: 'clocked out', time: '8:30 AM', status: 'success' as const },
-  { name: 'Sarah Wilson', action: 'late arrival', time: '8:15 AM', status: 'warning' as const },
-];
+import { useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { fetchDashboard } from "@/store/slices/dashboardSlice";
+import type { AppDispatch, RootState } from "@/store";
+import Image from "next/image";
 
 const quickActions = [
   { title: 'Add New Employee', description: 'Create employee profile', href: '/admin/employees', icon: UserPlus, className: "bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200/70 dark:hover:bg-blue-900/80 border border-blue-200 dark:border-blue-800" },
   { title: 'Generate Report', description: 'Export attendance data', href: '/admin/reports', icon: FileTextIcon, className: "bg-emerald-100 dark:bg-emerald-900/50 hover:bg-emerald-200/70 dark:hover:bg-emerald-900/80" },
   { title: 'Manage Shifts', description: 'Update work schedules', href: '#', icon: CalendarClock, className: "bg-purple-100 dark:bg-purple-900/50 hover:bg-purple-200/70 dark:hover:bg-purple-900/80" },
 ];
-
-const chartData = [
-  { status: "Present", count: 750, fill: "hsl(var(--chart-2))", icon: CheckCircle2 },
-  { status: "On Leave", count: 120, fill: "hsl(var(--chart-4))", icon: CalendarOff },
-  { status: "Absent", count: 22, fill: "hsl(var(--chart-1))", icon: UserX },
-]
 
 const chartConfig = {
   count: {
@@ -77,6 +38,56 @@ const chartConfig = {
 }
 
 export default function AdminDashboardPage() {
+  const dispatch = useDispatch<AppDispatch>();
+  const { totalEmployees, totalManagers, workingEmployees, shiftWise, isLoading } = useSelector((state: RootState) => state.dashboard);
+
+  useEffect(() => {
+    dispatch(fetchDashboard());
+  }, [dispatch]);
+
+  const metrics = [
+    {
+      icon: Users,
+      label: "Total Employees",
+      value: totalEmployees,
+      growth: "",
+      color: "text-emerald-500",
+    },
+    {
+      icon: UserCog,
+      label: "Total Managers",
+      value: totalManagers,
+      growth: "",
+      color: "text-emerald-500",
+    },
+    {
+      icon: Briefcase,
+      label: "Working Employees",
+      value: workingEmployees,
+      growth: "",
+      color: "text-emerald-500",
+    },
+    {
+      icon: Activity,
+      label: "Night Shift",
+      value: shiftWise.night ?? 0,
+      growth: "",
+      color: "text-emerald-500",
+    },
+  ];
+
+  const chartData = [
+    { status: "Morning", count: shiftWise.morning ?? 0, fill: "hsl(var(--chart-2))", icon: CheckCircle2 },
+    { status: "Night", count: shiftWise.night ?? 0, fill: "hsl(var(--chart-4))", icon: CalendarOff },
+  ];
+
+  const recentActivity = [
+    { name: 'John Doe', action: 'clocked in', time: '9:00 AM', status: 'success' as const },
+    { name: 'Jane Smith', action: 'requested leave', time: '8:45 AM', status: 'pending' as const },
+    { name: 'Mike Johnson', action: 'clocked out', time: '8:30 AM', status: 'success' as const },
+    { name: 'Sarah Wilson', action: 'late arrival', time: '8:15 AM', status: 'warning' as const },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -87,7 +98,11 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {metrics.map((metric) => (
+        {isLoading ? (
+          <div className="p-8 text-center flex justify-center">
+            <Image src="/dr-enterprise-logo.png" alt="D.R. Enterprise Logo" width={80} height={80} className="mx-auto animate-pulse" />
+          </div>
+        ) : metrics.map((metric) => (
           <Card key={metric.label} className="transition-all duration-300 ease-in-out hover:shadow-lg">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">
@@ -97,13 +112,13 @@ export default function AdminDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{metric.value}</div>
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
+              {/* <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <span className={`${metric.color} font-semibold flex items-center`}>
                     <ArrowUpRight className="h-4 w-4 mr-1" />
                     {metric.growth}
                 </span>
                 from last month
-              </p>
+              </p> */}
             </CardContent>
           </Card>
         ))}
@@ -113,11 +128,14 @@ export default function AdminDashboardPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
-              Today's Attendance Overview
+              Shift-wise Attendance
             </CardTitle>
           </CardHeader>
           <CardContent>
-             <ChartContainer config={chartConfig} className="w-full h-[250px]">
+            {isLoading ? (
+              <div className="p-8 text-center text-muted-foreground">Loading chart...</div>
+            ) : (
+              <ChartContainer config={chartConfig} className="w-full h-[250px]">
                 <BarChart data={chartData} accessibilityLayer>
                   <CartesianGrid vertical={false} />
                   <XAxis
@@ -141,6 +159,7 @@ export default function AdminDashboardPage() {
                   <Bar dataKey="count" radius={4} />
                 </BarChart>
               </ChartContainer>
+            )}
           </CardContent>
         </Card>
         <Card className="lg:col-span-2">

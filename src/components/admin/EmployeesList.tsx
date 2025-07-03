@@ -25,12 +25,17 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { useDispatch } from "react-redux";
+import { removeEmployee } from "@/store/slices/employeeSlice";
+import { useToast } from "@/hooks/use-toast";
 
-type Employee = { id: string; name: string; email: string; manager: string; status: 'Active' | 'On Leave' | 'Terminated'; shift: string; };
-type Manager = { id: string; name: string; };
+type Employee = { id: string; name: string; email: string; manager: string; status: 'Active' | 'On Leave' | 'Terminated'; shift: string; managerId: string; isWorking: boolean; };
+type Manager = { _id: string; name: string; };
 
 export function EmployeesList({ employees, managers }: { employees: Employee[], managers: Manager[] }) {
   const isMobile = useIsMobile();
+  const dispatch = useDispatch();
+  const { toast } = useToast();
 
   const getStatusVariant = (status: Employee['status']) => {
     switch(status) {
@@ -40,6 +45,17 @@ export function EmployeesList({ employees, managers }: { employees: Employee[], 
         default: return 'outline';
     }
   }
+
+  const getManagerName = (managerId: string) => managers.find((m: any) => m._id === managerId)?.name || "-";
+
+  const handleDelete = async (employee: any) => {
+    try {
+      await dispatch(removeEmployee({ id: employee.id }) as any).unwrap();
+      toast({ title: "Deleted", description: `Employee ${employee.name} deleted.` });
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to delete employee.", variant: "destructive" });
+    }
+  };
 
   if (isMobile) {
     return (
@@ -55,10 +71,10 @@ export function EmployeesList({ employees, managers }: { employees: Employee[], 
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <p><strong className="text-muted-foreground">Email:</strong> {employee.email}</p>
-              <p><strong className="text-muted-foreground">Manager:</strong> {employee.manager}</p>
+              <p><strong className="text-muted-foreground">Manager:</strong> {getManagerName(employee.managerId)}</p>
               <div className="flex gap-2 pt-2">
                 <EditEmployeeModal employee={employee} managers={managers} />
-                <DeleteAction employeeName={employee.name} />
+                <DeleteAction employee={employee} onDelete={handleDelete} />
               </div>
             </CardContent>
           </Card>
@@ -86,7 +102,7 @@ export function EmployeesList({ employees, managers }: { employees: Employee[], 
             <TableCell className="font-medium">{employee.name}</TableCell>
             <TableCell className="hidden md:table-cell text-muted-foreground">{employee.id}</TableCell>
             <TableCell className="hidden lg:table-cell text-muted-foreground">{employee.email}</TableCell>
-            <TableCell className="hidden md:table-cell text-muted-foreground">{employee.manager}</TableCell>
+            <TableCell className="hidden md:table-cell text-muted-foreground">{getManagerName(employee.managerId)}</TableCell>
             <TableCell>
               <Badge variant={getStatusVariant(employee.status)}>
                 {employee.status}
@@ -95,7 +111,7 @@ export function EmployeesList({ employees, managers }: { employees: Employee[], 
             <TableCell className="text-right">
               <div className="flex gap-1 justify-end">
                 <EditEmployeeModal employee={employee} managers={managers} />
-                <DeleteAction employeeName={employee.name} />
+                <DeleteAction employee={employee} onDelete={handleDelete} />
               </div>
             </TableCell>
           </TableRow>
@@ -106,7 +122,7 @@ export function EmployeesList({ employees, managers }: { employees: Employee[], 
   );
 }
 
-function DeleteAction({ employeeName }: { employeeName: string }) {
+function DeleteAction({ employee, onDelete }: { employee: any, onDelete: (employee: any) => void }) {
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
@@ -118,12 +134,12 @@ function DeleteAction({ employeeName }: { employeeName: string }) {
         <AlertDialogHeader>
           <AlertDialogTitle>Are you sure?</AlertDialogTitle>
           <AlertDialogDescription>
-            This action cannot be undone. This will permanently delete the employee record for {employeeName}.
+            This action cannot be undone. This will permanently delete the employee record for {employee.name}.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction variant="destructive">Delete</AlertDialogAction>
+          <AlertDialogAction onClick={() => onDelete(employee)}>Delete</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

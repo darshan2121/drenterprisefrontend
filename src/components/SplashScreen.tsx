@@ -18,7 +18,7 @@ const SplashScreen = () => {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-background">
       <div className="flex flex-col items-center gap-4 animate-pulse">
-        <Image src="https://i.postimg.cc/VvNcC0Cw/image-removebg-preview-1.png" alt="D.R. Enterprise Logo" width={200} height={200} />
+        <Image src="/dr-enterprise-logo.png" alt="D.R. Enterprise Logo" width={200} height={200} />
       </div>
       <p className="mt-4 text-muted-foreground">Attendance Management System</p>
     </div>

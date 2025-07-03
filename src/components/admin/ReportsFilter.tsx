@@ -22,67 +22,87 @@ import {
 import { CardContent, CardFooter } from "../ui/card"
 
 type Props = {
-    employees: { name: string }[];
-    managers: { name: string }[];
+    employees: { name: string; _id: string }[];
+    managers: { name: string; _id: string }[];
+    onManagerChange?: (id: string) => void;
+    onEmployeeChange?: (id: string) => void;
 }
 
-export function ReportsFilter({ employees, managers }: Props) {
-  const [date, setDate] = React.useState<Date>()
-
-  return (
-    <>
-    <CardContent className="p-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+export function ReportsFilter({ employees, managers, onManagerChange, onEmployeeChange }: Props) {
+    const [date, setDate] = React.useState<Date>();
+    const [selectedManager, setSelectedManager] = React.useState<string>("");
+    const [selectedEmployee, setSelectedEmployee] = React.useState<string>("");
+  
+    const handleClear = () => {
+      setDate(undefined);
+      setSelectedManager("");
+      setSelectedEmployee("");
+      onManagerChange?.("");
+      onEmployeeChange?.("");
+    };
+  
+    return (
+      <>
+        <CardContent className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Popover>
-                <PopoverTrigger asChild>
+              <PopoverTrigger asChild>
                 <Button
-                    variant={"outline"}
-                    className={cn(
+                  variant={"outline"}
+                  className={cn(
                     "w-full justify-start text-left font-normal",
                     !date && "text-muted-foreground"
-                    )}
+                  )}
                 >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {date ? format(date, "PPP") : <span>Pick a date</span>}
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {date ? format(date, "PPP") : <span>Pick a date</span>}
                 </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0">
                 <Calendar
-                    mode="single"
-                    selected={date}
-                    onSelect={setDate}
-                    initialFocus
+                  mode="single"
+                  selected={date}
+                  onSelect={setDate}
+                  initialFocus
                 />
-                </PopoverContent>
+              </PopoverContent>
             </Popover>
-            <Select>
-                <SelectTrigger>
-                    <SelectValue placeholder="Filter by Manager" />
-                </SelectTrigger>
-                <SelectContent>
-                    {managers.map(m => <SelectItem key={m.name} value={m.name}>{m.name}</SelectItem>)}
-                </SelectContent>
+            <Select 
+              value={selectedManager} 
+              onValueChange={(val) => {
+                setSelectedManager(val);
+                onManagerChange?.(val);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by Manager" />
+              </SelectTrigger>
+              <SelectContent>
+                {managers.map(m => <SelectItem key={m._id} value={m._id}>{m.name}</SelectItem>)}
+              </SelectContent>
             </Select>
-            <Select>
-                <SelectTrigger>
-                    <SelectValue placeholder="Filter by Employee" />
-                </SelectTrigger>
-                <SelectContent>
-                    {employees.map(e => <SelectItem key={e.name} value={e.name}>{e.name}</SelectItem>)}
-                </SelectContent>
+            <Select 
+              value={selectedEmployee} 
+              onValueChange={(val) => {
+                setSelectedEmployee(val);
+                onEmployeeChange?.(val);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by Employee" />
+              </SelectTrigger>
+              <SelectContent>
+                {employees.map(e => <SelectItem key={e._id} value={e._id}>{e.name}</SelectItem>)}
+              </SelectContent>
             </Select>
-        </div>
-    </CardContent>
-    <CardFooter className="flex justify-end gap-2 border-t pt-6">
-        <Button variant="outline">
+          </div>
+        </CardContent>
+        <CardFooter className="flex justify-end gap-2 border-t pt-6">
+          <Button variant="outline" onClick={handleClear}>
             <X className="mr-2 h-4 w-4" />
             Clear
-        </Button>
-        <Button>
-            <Filter className="mr-2 h-4 w-4" />
-            Filter
-        </Button>
-    </CardFooter>
-    </>
-  )
-}
+          </Button>
+        </CardFooter>
+      </>
+    );
+  }

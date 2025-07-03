@@ -29,8 +29,7 @@ type Report = {
     clockOut: string;
 };
 
-export function ReportsTable({ reports }: { reports: Report[] }) {
-  const isMobile = useIsMobile();
+export function ReportsTable({ reports, onRefresh }: { reports: Report[], onRefresh?: () => void }) {  const isMobile = useIsMobile();
 
   const getStatusVariant = (status: Report['status']) => {
     switch(status) {
@@ -85,7 +84,7 @@ export function ReportsTable({ reports }: { reports: Report[] }) {
             <FileDown className="mr-2 h-4 w-4" />
             XLS
         </Button>
-        <Button variant="ghost" size="icon">
+        <Button variant="ghost" size="icon" onClick={onRefresh}>
             <RefreshCw className="h-4 w-4" />
         </Button>
     </div>
@@ -93,7 +92,7 @@ export function ReportsTable({ reports }: { reports: Report[] }) {
 
   if (isMobile) {
     return (
-      <div className="p-4 md:p-0">
+      <div className="p-6 md:p-0">
          <div className="flex justify-end mb-4">
             <HeaderActions />
          </div>
@@ -172,3 +171,7 @@ export function ReportsTable({ reports }: { reports: Report[] }) {
     </>
   );
 }
+function onRefresh(event: MouseEvent<HTMLButtonElement, MouseEvent>): void {
+  throw new Error("Function not implemented.");
+}
+
