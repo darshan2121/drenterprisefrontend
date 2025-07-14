@@ -4,7 +4,8 @@ import {
   markStepIn,
   markStepOut,
   getEmployeeAttendance,
-  getAllAttendance
+  getAllAttendance,
+  updateAttendance
 } from "../controller/attendence.controller.js";
 import { authenticateUser } from "../utils/middlewere.js";
 
@@ -23,6 +24,10 @@ const upload = multer({ storage });
 
 // Step in: upload single image
 router.post("/step-in", authenticateUser,upload.single("stepInImage"), markStepIn);
+
+// Update attendance by attendance ID (supports all fields including stepOut)
+router.put("/:attendanceId", authenticateUser,upload.single("stepInImage"), updateAttendance);
+
 
 // Step out: parse FormData with no file
 router.post("/step-out", authenticateUser, upload.none(), markStepOut);

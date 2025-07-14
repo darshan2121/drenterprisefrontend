@@ -19,7 +19,7 @@ const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGODB_URI ;
 app.use(cors(
     {
-        origin: '*', // Allow all origins, you can restrict this to specific domains
+        origin: ['http://localhost:3000',"https://genuine-pasca-a6fc36.netlify.app"], // Allow all origins, you can restrict this to specific domains
         methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
         credentials: true,
     }

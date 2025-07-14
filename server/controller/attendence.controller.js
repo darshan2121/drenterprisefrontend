@@ -35,6 +35,92 @@ export const markStepIn = async (req, res) => {
     res.status(500).json({ message: "Error marking step in", error });
   }
 };
+
+export const updateAttendance = async (req, res) => {
+  try {
+    const { attendanceId } = req.params;
+    const { 
+      longitude, 
+      latitude, 
+      address, 
+      note, 
+      stepOut,
+      stepOutImage,
+      totalTime,
+      employeeId,
+      managerId,
+      stepIn
+    } = req.body;
+
+    // Find the attendance record
+    const attendance = await Attendance.findById(attendanceId);
+    if (!attendance) {
+      return res.status(404).json({ message: "Attendance record not found" });
+    }
+
+    // Prepare update data
+    const updateData = {};
+    
+    if (longitude !== undefined) updateData.longitude = longitude;
+    if (latitude !== undefined) updateData.latitude = latitude;
+    if (address !== undefined) updateData.address = address;
+    if (note !== undefined) updateData.note = note;
+    if (employeeId !== undefined) updateData.employeeId = employeeId;
+    if (managerId !== undefined) updateData.managerId = managerId;
+    if (stepIn !== undefined) updateData.stepIn = new Date(stepIn);
+    if (totalTime !== undefined) updateData.totalTime = totalTime;
+
+    // Handle stepOut update
+    if (stepOut !== undefined) {
+      updateData.stepOut = new Date(stepOut);
+      
+      // Calculate totalTime if not provided
+      if (totalTime === undefined && attendance.stepIn) {
+        const stepInTime = new Date(attendance.stepIn);
+        const stepOutTime = new Date(stepOut);
+        updateData.totalTime = Math.floor((stepOutTime - stepInTime) / (1000 * 60)); // in minutes
+      }
+      
+      // Update employee working status when stepping out
+      if (attendance.employeeId) {
+        await Employee.findByIdAndUpdate(attendance.employeeId, { isWorking: false });
+      }
+    }
+
+    // Handle image updates
+    if (req.file) {
+      // Determine which image to update based on field name or current state
+      if (req.file.fieldname === 'stepOutImage' || stepOut !== undefined) {
+        updateData.stepOutImage = req.file.filename;
+      } else {
+        updateData.stepInImage = req.file.filename;
+      }
+    }
+
+    // Handle stepOutImage as string (if passed in body)
+    if (stepOutImage !== undefined) {
+      updateData.stepOutImage = stepOutImage;
+    }
+
+    // Update the attendance record
+    const updatedAttendance = await Attendance.findByIdAndUpdate(
+      attendanceId,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    res.status(200).json({ 
+      message: "Attendance updated successfully", 
+      attendance: updatedAttendance 
+    });
+  } catch (error) {
+    console.error("Error updating attendance:", error);
+    res.status(500).json({ message: "Error updating attendance", error });
+  }
+};
+
+
+
 // Mark step out
 export const markStepOut = async (req, res) => {
   try {
