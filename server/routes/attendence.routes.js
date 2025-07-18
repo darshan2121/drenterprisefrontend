@@ -32,6 +32,7 @@ router.put("/:attendanceId", authenticateUser,upload.single("stepInImage"), upda
 // Step out: parse FormData with no file
 router.post("/step-out", authenticateUser, upload.none(), markStepOut);
 
+// 
 router.get("/", authenticateUser, getAllAttendance);
 
 // Add this route for fetching attendance by employeeId

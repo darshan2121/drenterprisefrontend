@@ -49,7 +49,8 @@ export const updateAttendance = async (req, res) => {
       totalTime,
       employeeId,
       managerId,
-      stepIn
+      stepIn,
+      shift,
     } = req.body;
 
     // Find the attendance record
@@ -69,6 +70,7 @@ export const updateAttendance = async (req, res) => {
     if (managerId !== undefined) updateData.managerId = managerId;
     if (stepIn !== undefined) updateData.stepIn = new Date(stepIn);
     if (totalTime !== undefined) updateData.totalTime = totalTime;
+     if (shift !== undefined) updateData.shift = shift;
 
     // Handle stepOut update
     if (stepOut !== undefined) {
