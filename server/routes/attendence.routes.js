@@ -1,7 +1,16 @@
 import express from "express";
 import multer from "multer";
-import { markStepIn, markStepOut, getEmployeeAttendance } from "../controller/attendence.controller.js";
+import {
+  markStepIn,
+  markStepOut,
+  getEmployeeAttendance,
+  getAllAttendance,
+  updateAttendance
+} from "../controller/attendence.controller.js";
 import { authenticateUser } from "../utils/middlewere.js";
+
+const router = express.Router();
+
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
@@ -10,7 +19,7 @@ import fs from "fs";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const router = express.Router();
+
 
 // Define upload directory path (goes up one level from current file)
 const uploadDir = path.join(__dirname, "../upload");
@@ -33,11 +42,19 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // Step in: upload single image
-router.post("/step-in", authenticateUser, upload.single("stepInImage"), markStepIn);
+router.post("/step-in", authenticateUser,upload.single("stepInImage"), markStepIn);
 
-// Step out: upload single image
-router.post("/step-out", authenticateUser, markStepOut);
+// Update attendance by attendance ID (supports all fields including stepOut)
+router.put("/:attendanceId", authenticateUser,upload.single("stepInImage"), updateAttendance);
 
-router.get("/", authenticateUser, getEmployeeAttendance);
+
+// Step out: parse FormData with no file
+router.post("/step-out", authenticateUser, upload.none(), markStepOut);
+
+// 
+router.get("/", authenticateUser, getAllAttendance);
+
+// Add this route for fetching attendance by employeeId
+router.get("/:employeeId", authenticateUser, getEmployeeAttendance);
 
 export default router;
