@@ -5,7 +5,7 @@ import Employee from "../models/employee.models.js";
 export const markStepIn = async (req, res) => {
   try {
     // console.log("[DEBUG] markStepIn request body:", req.body);
-    const { employeeId, managerId, longitude, latitude, address, note } = req.body;
+    const { employeeId, managerId, longitude, latitude, address, note,shift } = req.body;
 
     // Check if there is already an open attendance for this employee
     const openAttendance = await Attendance.findOne({ employeeId, stepOut: { $exists: false } });
@@ -24,7 +24,8 @@ export const markStepIn = async (req, res) => {
       longitude,
       latitude,
       address,
-      note
+      note,
+shift
     });
 
     await attendance.save();
