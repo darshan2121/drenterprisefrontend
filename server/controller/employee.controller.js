@@ -17,7 +17,7 @@ export const createEmployee = async (req, res) => {
         } = req.body;
 
         // Validate required fields
-        if (!name || !address || !managerId || !shift || createdBy === undefined || isCreatedByAdmin === undefined) {
+        if (!name || !address || !managerId || !shift || !createdBy || !isCreatedByAdmin) {
             return res.status(400).json({ message: "All fields are required" });
         }
 
