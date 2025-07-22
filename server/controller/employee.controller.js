@@ -2,29 +2,51 @@ import Employee from "../models/employee.models.js";
 
 
 
+// Controller: createEmployee
 export const createEmployee = async (req, res) => {
     try {
-        const { email, name, mobile, address, managerId, shift,createdBy,isCreatedByAdmin } = req.body;
-        // Log the incoming payload for debugging
-        // console.log('[CREATE EMPLOYEE] Payload:', req.body);
+        const {
+            email = "",
+            mobile = "",
+            name,
+            address,
+            managerId,
+            shift,
+            createdBy,
+            isCreatedByAdmin
+        } = req.body;
+
         // Validate required fields
-        if (!email || !name || !mobile || !address || !managerId || !shift || !isCreatedByAdmin || !createdBy) {
+        if (!name || !address || !managerId || !shift || createdBy === undefined || isCreatedByAdmin === undefined) {
             return res.status(400).json({ message: "All fields are required" });
         }
-        const newEmployee = new Employee({ email, name, mobile, address, managerId, shift, createdBy , isCreatedByAdmin });
+
+        const newEmployee = new Employee({
+            email,
+            name,
+            mobile,
+            address,
+            managerId,
+            shift,
+            createdBy,
+            isCreatedByAdmin
+        });
+
         await newEmployee.save();
-        // Log the saved employee for debugging
-        // console.log('[CREATE EMPLOYEE] Saved Employee:', newEmployee);
-        res.status(201).json({ message: "Employee created successfully", employee: newEmployee });
+
+        res.status(201).json({
+            message: "Employee created successfully",
+            employee: newEmployee
+        });
     } catch (error) {
         if (error.code === 11000) {
-        return res.status(400).json({ message: "Email already exists" });
+            return res.status(400).json({ message: "Email already exists" });
         }
         console.error("Error creating employee:", error);
         res.status(500).json({ message: "Error creating employee", error });
     }
-    
-}
+};
+
 
 
 export const updateEmployee = async (req, res) => {
@@ -127,3 +149,45 @@ export const getEmployees = async (req, res) => {
     res.status(500).json({ message: "Error fetching employees", error });
   }
 }
+
+// Controller: createEmployeeByManager
+export const createEmployeeByManager = async (req, res) => {
+    try {
+        const { email = "", mobile = "", name, address, shift } = req.body;
+        const user = req.user;
+
+        // Validate required fields
+        if (!name || !address || !shift) {
+            return res.status(400).json({ message: "All fields are required" });
+        }
+
+        // Set managerId and createdBy from logged-in manager
+        const managerId = user.id;
+        const createdBy = user.id;
+        const isCreatedByAdmin = false;
+
+        const newEmployee = new Employee({
+            email,
+            name,
+            mobile,
+            address,
+            managerId,
+            shift,
+            createdBy,
+            isCreatedByAdmin
+        });
+
+        await newEmployee.save();
+
+        res.status(201).json({
+            message: "Employee created successfully",
+            employee: newEmployee
+        });
+    } catch (error) {
+        if (error.code === 11000) {
+            return res.status(400).json({ message: "Email already exists" });
+        }
+        console.error("Error creating employee by manager:", error);
+        res.status(500).json({ message: "Error creating employee by manager", error });
+    }
+};

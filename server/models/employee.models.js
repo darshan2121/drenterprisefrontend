@@ -4,8 +4,7 @@ import { model,Schema } from "mongoose";
 const employeeSchema = new Schema({
   email: {
     type: String,
-    required: true,
-    unique: true,
+
   },
   name: {
     type: String,
@@ -13,7 +12,7 @@ const employeeSchema = new Schema({
   },
   mobile: {
     type: String,
-    required: true,
+   default:""
   },
   address: {
     type: String,

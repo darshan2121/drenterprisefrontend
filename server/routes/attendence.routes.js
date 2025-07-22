@@ -57,4 +57,6 @@ router.get("/", authenticateUser, getAllAttendance);
 // Add this route for fetching attendance by employeeId
 router.get("/:employeeId", authenticateUser, getEmployeeAttendance);
 
+
+
 export default router;
