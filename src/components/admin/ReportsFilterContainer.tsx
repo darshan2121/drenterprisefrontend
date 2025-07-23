@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react";
-import { getManagers } from "@/lib/api";
+import { getManagers, getEmployees } from "@/lib/api";
 import { ReportsFilter } from "./ReportsFilter";
 import { useDispatch } from "react-redux";
 import { fetchEmployees } from "@/store/slices/employeeSlice";

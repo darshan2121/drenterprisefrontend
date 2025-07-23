@@ -76,7 +76,7 @@ export function EditManagerModal({ manager }: { manager: Manager }) {
     }
 
     try {
-      let newSuggestions: string[] = [];
+      const newSuggestions: string[] = [];
       
       switch (field) {
         case "location":
@@ -121,8 +121,7 @@ export function EditManagerModal({ manager }: { manager: Manager }) {
   useEffect(() => {
     const timer = setTimeout(() => {
       if (activeField && form[activeField as keyof typeof form]) {
-        fetchSuggestions(activeField, form[activeField as keyof typeof form]);
-      }
+        fetchSuggestions(activeField, String(form[activeField as keyof typeof form] ?? ""));      }
     }, 300);
     
     return () => clearTimeout(timer);
@@ -198,11 +197,11 @@ export function EditManagerModal({ manager }: { manager: Manager }) {
           <Edit className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="w-[95vw] sm:w-full sm:max-w-md md:max-w-lg max-h-[90vh] overflow-y-auto rounded-lg p-4 sm:p-6">
         <DialogHeader>
-          <DialogTitle>Edit Manager</DialogTitle>
+          <DialogTitle>Edit Supervisor</DialogTitle>
           <DialogDescription>
-            Make changes to {manager.name}&apos;s profile here. Click save when you&apos;re done.
+            Update the details for the supervisor.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">

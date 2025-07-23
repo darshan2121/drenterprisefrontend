@@ -1,4 +1,5 @@
 import { getEmployees, addManager, updateManager, deleteManager } from '@/lib/api';
+import apiClient from '@/lib/api';
 
 export interface AddEmployeePayload {
   name: string;

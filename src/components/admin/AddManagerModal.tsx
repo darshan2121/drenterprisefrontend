@@ -19,6 +19,7 @@ import { useState, useEffect } from "react";
 import { useDispatch } from "react-redux";
 import { createManager } from "@/store/slices/managerSlice";
 import axios from "axios";
+import { authService } from "@/services/authService";
 
 // Type for field suggestions
 type FieldSuggestions = {
@@ -53,6 +54,8 @@ export function AddManagerModal() {
   });
 
   const [activeField, setActiveField] = useState<string | null>(null);
+
+  const isReadonly = authService.getCurrentUser()?.role === "readonly";
 
   // Fetch suggestions based on field type
   const fetchSuggestions = async (field: string, value: string) => {
@@ -233,24 +236,26 @@ export function AddManagerModal() {
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <Button>
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Add Manager
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      {!isReadonly && (
+        <DialogTrigger asChild>
+          <Button>
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Add Supervisors
+          </Button>
+        </DialogTrigger>
+      )}
+      <DialogContent className="w-[95vw] sm:w-full sm:max-w-md md:max-w-lg max-h-[90vh] overflow-y-auto rounded-lg p-4 sm:p-6">
         <DialogHeader>
-          <DialogTitle>Add New Manager</DialogTitle>
+          <DialogTitle>Add New Supervisor</DialogTitle>
           <DialogDescription>
             Fill in the details for the new manager.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           {/* Name Field with Suggestions */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="name" className="text-right">Full Name</Label>
-            <div className="col-span-3 relative">
+          <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4">
+            <Label htmlFor="name" className="text-left sm:text-right">Full Name</Label>
+            <div className="sm:col-span-3 relative">
               <Input
                 id="name"
                 placeholder="Jane Roe"
@@ -265,9 +270,9 @@ export function AddManagerModal() {
           </div>
 
           {/* Email Field with Suggestions */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="email" className="text-right">Email</Label>
-            <div className="col-span-3 relative">
+          <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4">
+            <Label htmlFor="email" className="text-left sm:text-right">Email</Label>
+            <div className="sm:col-span-3 relative">
               <Input
                 id="email"
                 type="email"
@@ -283,13 +288,13 @@ export function AddManagerModal() {
           </div>
 
           {/* Password Field */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="password" className="text-right">Password</Label>
+          <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4">
+            <Label htmlFor="password" className="text-left sm:text-right">Password</Label>
             <Input
               id="password"
               type="password"
               placeholder="********"
-              className="col-span-3"
+              className="sm:col-span-3"
               disabled={isLoading}
               value={form.password}
               onChange={(e) => handleInputChange("password", e.target.value)}
@@ -297,13 +302,13 @@ export function AddManagerModal() {
           </div>
 
           {/* Team Size Field */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="teamSize" className="text-right">Team Size</Label>
+          <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4">
+            <Label htmlFor="teamSize" className="text-left sm:text-right">Team Size</Label>
             <Input
               id="teamSize"
               type="number"
               placeholder="10"
-              className="col-span-3"
+              className="sm:col-span-3"
               disabled={isLoading}
               value={form.teamSize}
               onChange={(e) => handleInputChange("teamSize", e.target.value)}
@@ -311,9 +316,9 @@ export function AddManagerModal() {
           </div>
 
           {/* Location Field with Suggestions */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="location" className="text-right">Location</Label>
-            <div className="col-span-3 relative">
+          <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4">
+            <Label htmlFor="location" className="text-left sm:text-right">Location</Label>
+            <div className="sm:col-span-3 relative">
               <Input
                 id="location"
                 placeholder="e.g., Main Office"
@@ -328,9 +333,9 @@ export function AddManagerModal() {
           </div>
 
           {/* Mobile Field with Suggestions */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="mobile" className="text-right">Mobile</Label>
-            <div className="col-span-3 relative">
+          <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4">
+            <Label htmlFor="mobile" className="text-left sm:text-right">Mobile</Label>
+            <div className="sm:col-span-3 relative">
               <Input
                 id="mobile"
                 placeholder="8128841553"

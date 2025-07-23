@@ -19,15 +19,30 @@ export const loginAdminAction = createAsyncThunk(
     try {
       const data = await loginAdmin(credentials);
       console.log("login admin--->",data)
-      if (data?.message === "Login successful" && data.token) {
+      // @ts-ignore
+      if (data?.token && data?.admin) {
+        // @ts-ignore
         localStorage.setItem('adminToken', data?.token);
+        // @ts-ignore
         localStorage.setItem('adminData', JSON.stringify(data?.admin));
         localStorage.setItem('userRole', 'admin');
+        localStorage.setItem('adminId', data?.admin?._id);
       }
       console.log('[Redux] loginAdmin fulfilled:', data?.admin);
       return data?.admin;
     } catch (error: any) {
-      return thunkAPI.rejectWithValue(error.response?.data?.message || 'Login failed');
+      console.log("login admin error --->", {
+        message: error?.message,
+        code: error?.code,
+        response: error?.response,
+        responseData: error?.response?.data,
+        responseStatus: error?.response?.status,
+        stack: error?.stack,
+      });
+    
+      // alert(error?.response?.data?.message || 'Login failed');
+    
+      return thunkAPI.rejectWithValue(error?.message||error?.response?.data?.message || 'Login failed');
     }
   }
 );

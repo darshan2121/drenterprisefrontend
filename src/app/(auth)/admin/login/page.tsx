@@ -8,18 +8,21 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import Image from "next/image";
-import { Loader2 } from "lucide-react";
+import { Loader2, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDispatch, useSelector } from "react-redux";
 import { loginAdminAction, clearError } from "@/store/slices/adminSlice";
+import { useToast } from "@/hooks/use-toast";
 
 export default function AdminLoginPage() {
   const [formData, setFormData] = useState({
     email: "",
     password: ""
   });
+  const [showPassword, setShowPassword] = useState(false);
   const router = useRouter();
   const dispatch = useDispatch();
+  const { toast } = useToast();
   const { isLoading, error } = useSelector((state: any) => state.admin);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -36,11 +39,19 @@ export default function AdminLoginPage() {
       dispatch(clearError());
       return;
     }
-    const resultAction = await dispatch(loginAdminAction(formData) as any);
-    if (loginAdminAction.fulfilled.match(resultAction)) {
+    try {
+      await dispatch(loginAdminAction({ email: formData.email, password: formData.password }) as any);
       router.push('/admin/dashboard');
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      // setIsLoading(false); // This line was removed from the new_code, so it's removed here.
     }
-    // error is handled by Redux state
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -85,18 +96,28 @@ export default function AdminLoginPage() {
                 disabled={isLoading}
               />
             </div>
-            <div className="grid gap-2">
+            <div className="grid gap-2 relative">
               <Label htmlFor="password">Password</Label>
               <Input 
                 id="password" 
                 name="password"
-                type="password" 
+                type={showPassword ? "text" : "password"}
                 required 
                 value={formData.password}
                 onChange={handleInputChange}
                 onKeyPress={handleKeyPress}
                 disabled={isLoading} 
+                className="pr-10"
               />
+              <button
+                type="button"
+                tabIndex={-1}
+                className="absolute right-2 top-9 text-muted-foreground hover:text-primary focus:outline-none"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
             </div>
             <Button onClick={handleLogin} disabled={isLoading} className="w-full">
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -104,9 +125,7 @@ export default function AdminLoginPage() {
             </Button>
           </div>
           <div className="mt-4 text-center text-sm">
-            <Link href="/login" className={cn("underline hover:text-primary", isLoading && "pointer-events-none opacity-50")}>
-              Login as Manager
-            </Link>
+            <Link href="/login" className={cn("underline hover:text-primary", isLoading && "pointer-events-none opacity-50")}>Login as Supervisor</Link>
           </div>
         </CardContent>
       </Card>

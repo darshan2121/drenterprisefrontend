@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { useDispatch, useSelector } from 'react-redux';
 import { clockIn, clockOut, fetchAttendanceId } from '@/store/slices/attendanceSlice';
+import { Tooltip } from "@/components/ui/tooltip";
 
 export function ClockInModal({ employee, attendanceId: propAttendanceId, status, onAttendanceChange }: {
   employee: { name: string; id: string };
@@ -28,7 +29,7 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
   onAttendanceChange?: (newId: string | null) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [step, setStep] = useState<"idle" | "capturing" | "preview" | "verifying" | "result">("idle");
+  const [step, setStep] = useState<"idle" | "capturing" | "preview" | "verifying" | "result" | "clockedIn">("idle");
   const [photoDataUri, setPhotoDataUri] = useState<string | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [verificationResult, setVerificationResult] = useState<VerifyClockInOutput | null>(null);
@@ -37,6 +38,8 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
   const [latitude, setLatitude] = useState<string>('');
   const [longitude, setLongitude] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user'); // Add this state
+  const [shift, setShift] = useState('morning');
   const attendanceIdFromRedux = useSelector((state: any) => state.attendance.attendanceIds[employee.id] || null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -50,7 +53,7 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
   console.log("[DEBUG] ClockInModal for", employee.name, "employeeId:", employee.id, "attendanceId from Redux:", attendanceIdFromRedux);
 
   // Add a loading state for attendanceId
-  const isAttendanceIdLoading = attendanceIdFromRedux === null;
+  const isAttendanceIdLoading = attendanceIdFromRedux === undefined;
 
   const stopCamera = useCallback(() => {
     if (stream) {
@@ -88,24 +91,36 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
             setLongitude(position.coords.longitude.toString());
           },
           (error) => {
-            toast({
-              variant: "destructive",
-              title: "Location Error",
-              description: "Could not get your location. Please allow location access.",
-            });
+            // Fallback to static coordinates (Bangalore example), no toast
+            setLatitude("12.9716");
+            setLongitude("77.5946");
           }
         );
+      } else {
+        // If geolocation is not available at all, no toast
+        setLatitude("12.9716");
+        setLongitude("77.5946");
       }
       // Fetch current attendance status from Redux
       dispatch(fetchAttendanceId(employee.id) as any);
     }
-  }, [isOpen, toast, employee.id, dispatch]);
+  }, [isOpen, employee.id, dispatch]);
 
   // Notify parent on attendanceId change
   useEffect(() => {
     if (onAttendanceChange) onAttendanceChange(attendanceIdFromRedux);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attendanceIdFromRedux]);
+
+  useEffect(() => {
+    if (isOpen) {
+      if (attendanceIdFromRedux) {
+        setStep('clockedIn');
+      } else {
+        setStep('idle');
+      }
+    }
+  }, [isOpen, attendanceIdFromRedux]);
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
@@ -117,7 +132,10 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
   const startCamera = useCallback(async () => {
     setStep('capturing');
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode }, // Use facingMode
+        audio: false
+      });
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
@@ -131,7 +149,7 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
       });
       setIsOpen(false);
     }
-  }, [toast]);
+  }, [toast, facingMode]); // Add facingMode as dependency
   
   const takePhoto = () => {
     const video = videoRef.current;
@@ -226,6 +244,7 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
       formData.append('latitude', latitude);
       formData.append('address', clockInLocation);
       formData.append('note', note);
+      formData.append('shift', shift); // <-- Add shift to FormData
       formData.append("employeeId", employee.id);
       // Only append managerId from localStorage if needed
       const managerId = typeof window !== 'undefined' ? localStorage.getItem('managerId') : '';
@@ -303,9 +322,27 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
     return !manualLocation.trim();
   }
   
+  const flipCamera = useCallback(() => {
+    setFacingMode((prev) => (prev === 'user' ? 'environment' : 'user'));
+    stopCamera();
+    setTimeout(() => {
+      startCamera();
+    }, 200); // Small delay to ensure camera stops before restarting
+  }, [stopCamera, startCamera]);
+
   const renderContent = () => {
-    // If user is already clocked in, show simple clock out option
-    if (attendanceIdFromRedux) {
+    if (isAttendanceIdLoading && isOpen) {
+      return (
+        <div className="my-4 w-full h-64 sm:aspect-square rounded-lg bg-muted flex items-center justify-center overflow-hidden">
+          <div className="flex flex-col items-center gap-4 text-muted-foreground">
+            <Loader2 className="h-12 w-12 animate-spin" />
+            <p>Loading attendance status...</p>
+          </div>
+        </div>
+      );
+    }
+    // If user is clocked in, show only the clock-out UI
+    if (attendanceIdFromRedux || step === 'clockedIn') {
       return (
         <div className="my-4 w-full h-64 sm:aspect-square rounded-lg bg-muted flex items-center justify-center overflow-hidden">
           <div className="text-center text-muted-foreground flex flex-col items-center gap-4">
@@ -323,8 +360,7 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
         </div>
       );
     }
-
-    // Original clock in flow
+    // Only show verification method if not clocked in
     switch(step) {
         case 'idle':
             return (
@@ -337,8 +373,18 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
             );
         case 'capturing':
             return (
-                <div className="my-4 w-full h-64 sm:aspect-square rounded-lg bg-muted flex items-center justify-center overflow-hidden">
+                <div className="my-4 w-full h-64 sm:aspect-square rounded-lg bg-muted flex items-center justify-center overflow-hidden relative">
                     <video ref={videoRef} autoPlay playsInline className="h-full w-full object-cover" />
+                    {/* Flip Camera Button Overlay */}
+                    <button
+                      type="button"
+                      onClick={flipCamera}
+                      className="absolute top-3 right-3 z-10 bg-white/80 hover:bg-white rounded-full p-2 shadow-md border border-gray-200 transition-colors"
+                      aria-label="Flip Camera"
+                      title="Flip Camera"
+                    >
+                      <RefreshCcw className="h-6 w-6 text-gray-700" />
+                    </button>
                 </div>
             );
         case 'preview':
@@ -359,6 +405,17 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
                                     onChange={(e) => setManualLocation(e.target.value)}
                                     placeholder="e.g., Main Office, Client Site"
                                 />
+                                <Label htmlFor="shift">Shift</Label>
+                                <select
+                                  id="shift"
+                                  value={shift}
+                                  onChange={e => setShift(e.target.value)}
+                                  className="block w-full border rounded px-2 py-1 mt-1 mb-2"
+                                >
+                                  <option value="morning">Morning</option>
+                                  <option value="evening">Evening</option>
+                                  <option value="night">Night</option>
+                                </select>
                                 <Label htmlFor="note">Note</Label>
                                 <Input
                                     id="note"

@@ -28,6 +28,7 @@ import {
 import { useDispatch } from "react-redux";
 import { removeEmployee } from "@/store/slices/employeeSlice";
 import { useToast } from "@/hooks/use-toast";
+import { authService } from "@/services/authService";
 
 type Employee = { id: string; name: string; email: string; manager: string; status: 'Active' | 'On Leave' | 'Terminated'; shift: string; managerId: string; isWorking: boolean; };
 type Manager = { _id: string; name: string; };
@@ -36,6 +37,7 @@ export function EmployeesList({ employees, managers }: { employees: Employee[], 
   const isMobile = useIsMobile();
   const dispatch = useDispatch();
   const { toast } = useToast();
+  const isReadonly = authService.getCurrentUser()?.role === "readonly";
 
   const getStatusVariant = (status: Employee['status']) => {
     switch(status) {
@@ -59,22 +61,22 @@ export function EmployeesList({ employees, managers }: { employees: Employee[], 
 
   if (isMobile) {
     return (
-      <div className="space-y-4 p-4 md:p-0">
+      <div className="space-y-3 p-2 sm:p-4 md:p-0">
         {employees.map((employee) => (
           <Card key={employee.id} className="shadow-md">
-            <CardHeader className="flex flex-row items-start justify-between">
-                <div>
-                    <CardTitle>{employee.name}</CardTitle>
-                    <CardDescription>{employee.id}</CardDescription>
+            <CardHeader className="flex flex-row items-start justify-between gap-2">
+                <div className="min-w-0">
+                    <CardTitle className="text-base sm:text-lg truncate">{employee.name}</CardTitle>
+                    <CardDescription className="text-xs sm:text-base truncate">{employee.id}</CardDescription>
                 </div>
-                <Badge variant={getStatusVariant(employee.status)} className="w-fit">{employee.status}</Badge>
+                <Badge variant={getStatusVariant(employee.status)} className="w-fit text-xs sm:text-base">{employee.status}</Badge>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <p><strong className="text-muted-foreground">Email:</strong> {employee.email}</p>
-              <p><strong className="text-muted-foreground">Manager:</strong> {getManagerName(employee.managerId)}</p>
-              <div className="flex gap-2 pt-2">
-                <EditEmployeeModal employee={employee} managers={managers} />
-                <DeleteAction employee={employee} onDelete={handleDelete} />
+            <CardContent className="space-y-2 text-sm sm:text-base">
+              <p className="truncate"><strong className="text-muted-foreground">Email:</strong> {employee.email}</p>
+              <p className="truncate"><strong className="text-muted-foreground">Manager:</strong> {getManagerName(employee.managerId)}</p>
+              <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                {!isReadonly && <EditEmployeeModal employee={employee} managers={managers} />}
+                {!isReadonly && <DeleteAction employee={employee} onDelete={handleDelete} />}
               </div>
             </CardContent>
           </Card>
@@ -84,40 +86,40 @@ export function EmployeesList({ employees, managers }: { employees: Employee[], 
   }
 
   return (
-    <div className="overflow-x-auto">
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Name</TableHead>
-          <TableHead className="hidden md:table-cell">ID</TableHead>
-          <TableHead className="hidden lg:table-cell">Email</TableHead>
-          <TableHead className="hidden md:table-cell">Assigned Manager</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {employees.map((employee) => (
-          <TableRow key={employee.id}>
-            <TableCell className="font-medium">{employee.name}</TableCell>
-            <TableCell className="hidden md:table-cell text-muted-foreground">{employee.id}</TableCell>
-            <TableCell className="hidden lg:table-cell text-muted-foreground">{employee.email}</TableCell>
-            <TableCell className="hidden md:table-cell text-muted-foreground">{getManagerName(employee.managerId)}</TableCell>
-            <TableCell>
-              <Badge variant={getStatusVariant(employee.status)}>
-                {employee.status}
-              </Badge>
-            </TableCell>
-            <TableCell className="text-right">
-              <div className="flex gap-1 justify-end">
-                <EditEmployeeModal employee={employee} managers={managers} />
-                <DeleteAction employee={employee} onDelete={handleDelete} />
-              </div>
-            </TableCell>
+    <div className="overflow-x-auto w-full">
+      <Table className="min-w-[600px]">
+        <TableHeader>
+          <TableRow>
+            <TableHead className="min-w-[120px]">Name</TableHead>
+            <TableHead className="hidden md:table-cell min-w-[100px]">ID</TableHead>
+            <TableHead className="hidden lg:table-cell min-w-[180px]">Email</TableHead>
+            <TableHead className="hidden md:table-cell min-w-[140px]">Assigned Manager</TableHead>
+            <TableHead className="min-w-[80px]">Status</TableHead>
+            <TableHead className="text-right min-w-[100px]">Actions</TableHead>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        </TableHeader>
+        <TableBody>
+          {employees.map((employee) => (
+            <TableRow key={employee.id}>
+              <TableCell className="font-medium truncate max-w-[120px]">{employee.name}</TableCell>
+              <TableCell className="hidden md:table-cell text-muted-foreground truncate max-w-[100px]">{employee.id}</TableCell>
+              <TableCell className="hidden lg:table-cell text-muted-foreground truncate max-w-[180px]">{employee.email}</TableCell>
+              <TableCell className="hidden md:table-cell text-muted-foreground truncate max-w-[140px]">{getManagerName(employee.managerId)}</TableCell>
+              <TableCell>
+                <Badge variant={getStatusVariant(employee.status)}>
+                  {employee.status}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex gap-1 justify-end">
+                  {!isReadonly && <EditEmployeeModal employee={employee} managers={managers} />}
+                  {!isReadonly && <DeleteAction employee={employee} onDelete={handleDelete} />}
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }

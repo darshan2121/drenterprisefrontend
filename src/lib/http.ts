@@ -19,6 +19,7 @@ export async function http<T>(
       if (!token || token === 'undefined' || token === '') token = localStorage.getItem('userToken');
     }
     if (token) {
+      console.log('[HTTP] Using Auth Token:', token);
       headers = { ...headers, Authorization: `Bearer ${token}` };
     }
   }
@@ -37,7 +38,7 @@ export async function http<T>(
   }
 
   if (!res.ok) {
-    console.error('[HTTP] Error:', url, data);
+    // console.error('[HTTP] Error:', url, data);
     throw new Error(data?.message || `HTTP error! status: ${res.status}`);
   }
   console.log('[HTTP] Response:', url, data);

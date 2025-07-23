@@ -4,7 +4,7 @@ import { http } from './http';
 
 // API Configuration
 const API_CONFIG = {
-  BASE_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5678/api',
+  BASE_URL: 'http://localhost:5678/api',
   TIMEOUT: 10000,
   RETRY_ATTEMPTS: 3,
 };
@@ -120,13 +120,30 @@ export const updateEmployee = (id: string, body: any) =>
 export const deleteEmployee = (id: string, body: any) =>
   http(ENDPOINTS.employee.single(id), { method: "DELETE", body: JSON.stringify(body) });
 
+export const addEmployeeByManager = (body: any) =>
+  http(ENDPOINTS.employee.addByManager, { method: "POST", body: JSON.stringify(body) });
+
 // Attendance
 export const clockInAttendance = (formData: FormData) =>
   http(ENDPOINTS.attendance.stepIn, { method: "POST", body: formData, isFormData: true });
 
 export const clockOutAttendance = (formData: FormData) =>
-  http('http://localhost:5678/api/attendence/step-out', { method: "POST", body: formData, isFormData: true });
+  http(ENDPOINTS.attendance.stepOut, { method: "POST", body: formData, isFormData: true });
+
+// Add new attendance API functions
+export const updateAttendance = (id: string, body: any) =>
+  http(ENDPOINTS.attendance.single(id), { method: "PUT", body: JSON.stringify(body) });
+
+export const getAttendanceByEmployee = (employeeId: string) =>
+  http(ENDPOINTS.attendance.byEmployee(employeeId));
 
 // Dashboard
 export const getDashboard = () =>
   http(ENDPOINTS.dashboard); 
+
+// Auth APIs
+export const forgotPassword = (body: any) =>
+  http(ENDPOINTS.auth.forgotPassword, { method: "POST", body: JSON.stringify(body) });
+
+export const verifyOtp = (body: any) =>
+  http(ENDPOINTS.auth.verifyOtp, { method: "POST", body: JSON.stringify(body) }); 

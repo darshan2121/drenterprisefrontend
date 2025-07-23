@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { CardContent, CardFooter } from "../ui/card"
+import { useIsMobile } from "@/hooks/use-mobile"
 
 type Props = {
     employees: { name: string; _id: string }[];
@@ -32,6 +33,7 @@ export function ReportsFilter({ employees, managers, onManagerChange, onEmployee
     const [date, setDate] = React.useState<Date>();
     const [selectedManager, setSelectedManager] = React.useState<string>("");
     const [selectedEmployee, setSelectedEmployee] = React.useState<string>("");
+    const isMobile = useIsMobile();
   
     const handleClear = () => {
       setDate(undefined);
@@ -43,14 +45,14 @@ export function ReportsFilter({ employees, managers, onManagerChange, onEmployee
   
     return (
       <>
-        <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <CardContent className="p-2 sm:p-4 md:p-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
             <Popover>
               <PopoverTrigger asChild>
                 <Button
                   variant={"outline"}
                   className={cn(
-                    "w-full justify-start text-left font-normal",
+                    "w-full justify-start text-left font-normal h-10 sm:h-9 text-sm sm:text-base",
                     !date && "text-muted-foreground"
                   )}
                 >
@@ -58,7 +60,7 @@ export function ReportsFilter({ employees, managers, onManagerChange, onEmployee
                   {date ? format(date, "PPP") : <span>Pick a date</span>}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
+              <PopoverContent className="w-auto p-0" align={isMobile ? "center" : "start"}>
                 <Calendar
                   mode="single"
                   selected={date}
@@ -74,8 +76,8 @@ export function ReportsFilter({ employees, managers, onManagerChange, onEmployee
                 onManagerChange?.(val);
               }}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by Manager" />
+              <SelectTrigger className="h-10 sm:h-9 text-sm sm:text-base">
+                <SelectValue placeholder="Filter by Supervisor" />
               </SelectTrigger>
               <SelectContent>
                 {managers.map(m => <SelectItem key={m._id} value={m._id}>{m.name}</SelectItem>)}
@@ -88,7 +90,7 @@ export function ReportsFilter({ employees, managers, onManagerChange, onEmployee
                 onEmployeeChange?.(val);
               }}
             >
-              <SelectTrigger>
+              <SelectTrigger className="h-10 sm:h-9 text-sm sm:text-base">
                 <SelectValue placeholder="Filter by Employee" />
               </SelectTrigger>
               <SelectContent>
@@ -97,8 +99,8 @@ export function ReportsFilter({ employees, managers, onManagerChange, onEmployee
             </Select>
           </div>
         </CardContent>
-        <CardFooter className="flex justify-end gap-2 border-t pt-6">
-          <Button variant="outline" onClick={handleClear}>
+        <CardFooter className="flex flex-col sm:flex-row justify-end gap-2 border-t pt-4 sm:pt-6 px-2 sm:px-4 md:px-6">
+          <Button variant="outline" size={isMobile ? "sm" : "default"} className="w-full sm:w-auto" onClick={handleClear}>
             <X className="mr-2 h-4 w-4" />
             Clear
           </Button>

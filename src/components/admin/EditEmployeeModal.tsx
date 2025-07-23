@@ -30,7 +30,8 @@ import { editEmployee } from "@/store/slices/employeeSlice";
 type Employee = { id: string; name: string; email: string; managerId: string; shift: string; isWorking: boolean; };
 type Manager = { _id: string; name: string; };
 
-export function EditEmployeeModal({ employee, managers }: { employee: Employee, managers: Manager[] }) {
+export function EditEmployeeModal({ employee, managers = [], ...props }) {
+  if (!employee) return null;
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
@@ -113,11 +114,11 @@ export function EditEmployeeModal({ employee, managers }: { employee: Employee, 
           <Edit className="h-4 w-4" />
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="w-[95vw] sm:w-full sm:max-w-md md:max-w-lg max-h-[90vh] overflow-y-auto rounded-lg p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>Edit Employee</DialogTitle>
           <DialogDescription>
-            Make changes to {employee.name}&apos;s profile here. Click save when you&apos;re done.
+            Update the details for the employee.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
@@ -130,7 +131,7 @@ export function EditEmployeeModal({ employee, managers }: { employee: Employee, 
             <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} className="col-span-3" disabled={isLoading} />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="manager" className="text-right">Manager</Label>
+            <Label htmlFor="manager" className="text-right">Supervisor</Label>
             <Select value={managerId} onValueChange={setManagerId} disabled={isLoading}>
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Select a manager" />

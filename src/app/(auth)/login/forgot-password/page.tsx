@@ -8,12 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { forgotPassword, verifyOtp } from "@/lib/api";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function ForgotPasswordPage() {
   const [step, setStep] = useState<"email" | "otp">("email");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -93,17 +95,27 @@ export default function ForgotPasswordPage() {
                     disabled={loading}
                   />
                 </div>
-                <div className="grid gap-2 mt-2">
+                <div className="grid gap-2 mt-2 relative">
                   <Label htmlFor="newPassword">New Password</Label>
                   <Input
                     id="newPassword"
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     placeholder="Enter new password"
                     required
                     value={newPassword}
                     onChange={e => setNewPassword(e.target.value)}
                     disabled={loading}
+                    className="pr-10"
                   />
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    className="absolute right-2 top-9 text-muted-foreground hover:text-primary focus:outline-none"
+                    onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
                 </div>
                 <Button onClick={handleVerifyOtp} disabled={loading || !otp || !newPassword} className="w-full mt-4">
                   {loading ? "Verifying..." : "Update Password"}

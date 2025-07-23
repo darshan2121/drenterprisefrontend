@@ -1,6 +1,6 @@
 // store/slices/employeeSlice.ts
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { getEmployees, addEmployee as apiAddEmployee, updateEmployee as apiUpdateEmployee, deleteEmployee as apiDeleteEmployee } from '@/lib/api';
+import { getEmployees, addEmployee as apiAddEmployee, updateEmployee as apiUpdateEmployee, deleteEmployee as apiDeleteEmployee, addEmployeeByManager as apiAddEmployeeByManager } from '@/lib/api';
 
 export interface Employee {
   _id: string;
@@ -83,6 +83,18 @@ export const removeEmployee = createAsyncThunk<string, { id: string }>(
   }
 );
 
+export const addEmployeeByManager = createAsyncThunk<AddEmployeeResponse, Omit<AddEmployeePayload, 'managerId' | 'createdBy' | 'isCreatedByAdmin'> & { shift: string; address: string; mobile: string; email: string; name: string }>(
+  'employee/addEmployeeByManager',
+  async (payload, { rejectWithValue }) => {
+    try {
+      const res: any = await apiAddEmployeeByManager(payload);
+      return res as AddEmployeeResponse;
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Failed to add employee');
+    }
+  }
+);
+
 interface EmployeeState {
   employees: Employee[];
   isLoading: boolean;
@@ -155,10 +167,23 @@ const employeeSlice = createSlice({
       .addCase(removeEmployee.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload as string;
+      })
+      .addCase(addEmployeeByManager.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+        state.successMessage = null;
+      })
+      .addCase(addEmployeeByManager.fulfilled, (state, action: PayloadAction<AddEmployeeResponse>) => {
+        state.isLoading = false;
+        state.successMessage = action.payload.message;
+        state.employees.push(action.payload.employee);
+      })
+      .addCase(addEmployeeByManager.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload as string;
       });
   },
 });
 
 export const { clearEmployeeError, clearEmployeeSuccess } = employeeSlice.actions;
 export default employeeSlice.reducer;
-export { fetchEmployees, addEmployee, editEmployee, removeEmployee };

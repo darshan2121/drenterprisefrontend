@@ -30,12 +30,14 @@ import { useToast } from "@/hooks/use-toast";
 import { useSelector, useDispatch } from "react-redux";
 import { fetchManagers, removeManager, Manager } from "@/store/slices/managerSlice";
 import type { AppDispatch } from "@/store";
+import { authService } from "@/services/authService";
 
 export function ManagersList() {
   const { managers, isLoading, error } = useSelector((state: any) => state.manager);
   const isMobile = useIsMobile();
   const { toast } = useToast();
   const dispatch = useDispatch<AppDispatch>();
+  const isReadonly = authService.getCurrentUser()?.role === "readonly";
 
   const getStatusVariant = (status: string) => {
     return status === 'Active' ? 'default' : 'secondary';
@@ -44,39 +46,36 @@ export function ManagersList() {
   const handleDelete = async (manager: Manager) => {
     try {
       await dispatch(removeManager({ id: manager._id, body: { name: manager.name, email: manager.email } }) as any).unwrap();
-      toast({ title: "Deleted", description: `Manager ${manager.name} deleted.` });
+      toast({ title: "Deleted", description: `Supervisor ${manager.name} deleted.` });
     } catch (error: any) {
-      toast({ title: "Error", description: error.message || "Failed to delete manager.", variant: "destructive" });
+      toast({ title: "Error", description: error.message || "Failed to delete supervisor.", variant: "destructive" });
     }
   };
 
-  if (isLoading) return <div className="p-8 text-center text-muted-foreground">Loading managers...</div>;
+  if (isLoading) return <div className="p-8 text-center text-muted-foreground">Loading supervisors...</div>;
   if (error) return <div className="p-8 text-center text-destructive">{error}</div>;
 
   if (isMobile) {
     return (
-      <div className="space-y-4 p-4 md:p-0">
+      <div className="space-y-3 p-2 sm:p-4 md:p-0">
         {managers.map((manager: Manager) => (
-          <Card key={manager._id} className="shadow-md">
-            <CardHeader className="pb-2 flex flex-row items-start justify-between">
-              <div className="flex items-center gap-3">
-                <Avatar className="h-10 w-10">
-                  <AvatarImage src={`/dr-enterprise-logo.png`} data-ai-hint="person" />
-                  <AvatarFallback>{manager.name.charAt(0)}</AvatarFallback>
-                </Avatar>
-                <div>
-                  <CardTitle className="text-base font-bold leading-tight">{manager.name}</CardTitle>
-                  <CardDescription className="text-xs">{manager.email}</CardDescription>
-                </div>
+          <Card key={manager._id} className="shadow-sm">
+            <CardHeader className="flex flex-row items-start justify-between gap-2">
+              <div className="min-w-0">
+                <CardTitle className="text-base sm:text-lg font-bold truncate">{manager.name}</CardTitle>
+                <CardDescription className="text-xs sm:text-base truncate">{manager._id}</CardDescription>
               </div>
-              <Badge variant={getStatusVariant(manager.status || (manager.isActive ? 'Active' : 'Inactive'))} className="w-fit text-xs px-2 py-1">{manager.status || (manager.isActive ? 'Active' : 'Inactive')}</Badge>
+              <Badge variant={getStatusVariant(manager.status || (manager.isActive ? 'Active' : 'Inactive'))} className="w-fit text-xs sm:text-base">
+                {manager.status || (manager.isActive ? 'Active' : 'Inactive')}
+              </Badge>
             </CardHeader>
-            <CardContent className="space-y-1 text-sm pb-2">
-              <p><strong className="text-muted-foreground">Team Size:</strong> {manager.teamSize ?? ''}</p>
-              <p><strong className="text-muted-foreground">Location:</strong> {manager.location || manager.address || ''}</p>
-              <div className="flex gap-2 pt-2 justify-end">
-                <EditManagerModal manager={manager} />
-                <DeleteAction manager={manager} onDelete={handleDelete} />
+            <CardContent className="space-y-2 text-sm sm:text-base">
+              <p className="truncate"><strong className="text-muted-foreground">Email:</strong> {manager.email}</p>
+              <p className="truncate"><strong className="text-muted-foreground">Team Size:</strong> {manager.teamSize || '0'}</p>
+              <p className="truncate"><strong className="text-muted-foreground">Location:</strong> {manager.location || manager.address || 'Not specified'}</p>
+              <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                {!isReadonly && <EditManagerModal manager={manager} />}
+                {!isReadonly && <DeleteAction manager={manager} onDelete={handleDelete} />}
               </div>
             </CardContent>
           </Card>
@@ -86,31 +85,37 @@ export function ManagersList() {
   }
 
   return (
-    <div className="overflow-x-auto">
-      <Table>
+    <div className="overflow-x-auto w-full">
+      <Table className="min-w-[600px]">
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead className="hidden lg:table-cell">Email</TableHead>
-            <TableHead className="hidden md:table-cell">Team Size</TableHead>
-            <TableHead className="hidden md:table-cell">Location</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
+            <TableHead className="min-w-[120px]">Name</TableHead>
+            <TableHead className="hidden lg:table-cell min-w-[180px]">Email</TableHead>
+            <TableHead className="hidden md:table-cell min-w-[100px]">Team Size</TableHead>
+            <TableHead className="hidden md:table-cell min-w-[140px]">Location</TableHead>
+            <TableHead className="min-w-[80px]">Status</TableHead>
+            <TableHead className="text-right min-w-[100px]">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {managers.map((manager: Manager) => (
            <TableRow key={manager._id}>
-              <TableCell className="font-medium flex items-center gap-3">
-                <Avatar>
-                    <AvatarImage src={`/dr-enterprise-logo.png`} data-ai-hint="person" />
-                    <AvatarFallback>{manager.name.charAt(0)}</AvatarFallback>
+              <TableCell className="font-medium flex items-center gap-3 max-w-[120px] truncate">
+                <Avatar className="h-8 w-8">
+                    <AvatarImage src={`https://placehold.co/40x40.png`} data-ai-hint="person" />
+                    <AvatarFallback className="text-sm">{manager.name.charAt(0).toUpperCase()}</AvatarFallback>
                 </Avatar>
-                {manager.name}
+                <span className="truncate">{manager.name}</span>
               </TableCell>
-              <TableCell className="hidden lg:table-cell text-muted-foreground">{manager.email}</TableCell>
-              <TableCell className="hidden md:table-cell text-muted-foreground">{manager.teamSize ?? ''}</TableCell>
-              <TableCell className="hidden md:table-cell text-muted-foreground">{manager.location || manager.address || ''}</TableCell>
+              <TableCell className="hidden lg:table-cell text-muted-foreground max-w-[180px] truncate">
+                <span className="truncate block" title={manager.email}>{manager.email}</span>
+              </TableCell>
+              <TableCell className="hidden md:table-cell text-muted-foreground max-w-[100px] truncate">{manager.teamSize || '0'}</TableCell>
+              <TableCell className="hidden md:table-cell text-muted-foreground max-w-[140px] truncate">
+                <span className="truncate block" title={manager.location || manager.address || ''}>
+                  {manager.location || manager.address || 'Not specified'}
+                </span>
+              </TableCell>
               <TableCell>
                 <Badge variant={getStatusVariant(manager.status || (manager.isActive ? 'Active' : 'Inactive'))}>
                   {manager.status || (manager.isActive ? 'Active' : 'Inactive')}
@@ -118,8 +123,8 @@ export function ManagersList() {
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex gap-1 justify-end">
-                  <EditManagerModal manager={manager} />
-                  <DeleteAction manager={manager} onDelete={handleDelete} />
+                  {!isReadonly && <EditManagerModal manager={manager} />}
+                  {!isReadonly && <DeleteAction manager={manager} onDelete={handleDelete} />}
                 </div>
               </TableCell>
             </TableRow>
@@ -142,7 +147,7 @@ function DeleteAction({ manager, onDelete }: { manager: Manager, onDelete: (mana
         <AlertDialogHeader>
           <AlertDialogTitle>Are you sure?</AlertDialogTitle>
           <AlertDialogDescription>
-            This action cannot be undone. This will permanently delete the manager record for {manager.name}.
+            This action cannot be undone. This will permanently delete the supervisor record for {manager.name}.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

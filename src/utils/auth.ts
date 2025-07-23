@@ -15,3 +15,13 @@ export function decodeToken(token: string): any {
     return null;
   }
 }
+
+function isAdminAuthenticated() {
+  if (typeof window === "undefined") return false;
+  return !!localStorage.getItem("adminToken");
+}
+
+function isManagerAuthenticated() {
+  if (typeof window === "undefined") return false;
+  return !!localStorage.getItem("managerToken");
+}

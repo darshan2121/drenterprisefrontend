@@ -56,6 +56,21 @@ export function authMiddleware(request: NextRequest) {
   return NextResponse.next();
 }
 
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const adminToken = request.cookies.get('adminToken');
+
+  if (!adminToken && pathname.startsWith('/admin/dashboard')) {
+    return NextResponse.redirect(new URL('/admin/login', request.url));
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ['/admin/dashboard'],
+};
+
 // Helper function to set auth cookies
 export function setAuthCookies(response: NextResponse, token: string, role: string, userData: any) {
   response.cookies.set('adminToken', token, {

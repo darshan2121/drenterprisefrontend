@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { clockInAttendance, clockOutAttendance } from '@/lib/api';
+import { clockInAttendance, clockOutAttendance, updateAttendance } from '@/lib/api';
 import { http } from '@/lib/http';
 import { ENDPOINTS } from '@/lib/endpoints';
 
@@ -60,17 +60,37 @@ export const clockOut = createAsyncThunk<any, FormData>(
   }
 );
 
-export const fetchAttendanceId = createAsyncThunk<{ employeeId: string, attendanceId: string | null }, string>(
+export const updateAttendanceRecord = createAsyncThunk<any, { id: string, data: any }>(
+  'attendance/updateAttendanceRecord',
+  async ({ id, data }, thunkAPI) => {
+    try {
+      const res = await updateAttendance(id, data);
+      return res;
+    } catch (err: any) {
+      return thunkAPI.rejectWithValue(err.message || 'Failed to update attendance');
+    }
+  }
+);
+
+export const fetchAttendanceId = createAsyncThunk<{ employeeId: string, attendanceId: string | null, attendanceRecord?: any }, string>(
   'attendance/fetchAttendanceId',
   async (employeeId, thunkAPI) => {
     try {
       const res = await http<{ attendance: any[] }>(ENDPOINTS.attendance.byEmployee(employeeId));
       let attendanceId: string | null = null;
+      let attendanceRecord: any | null = null;
       if (res && res.attendance && res.attendance.length > 0) {
+        // Find open attendance (no stepOut)
         const openAttendance = res.attendance.find((a: any) => !a.stepOut);
-        if (openAttendance) attendanceId = openAttendance._id;
+        if (openAttendance) {
+          attendanceId = openAttendance._id;
+          attendanceRecord = openAttendance;
+        } else {
+          // If no open attendance, use the most recent attendance (last in sorted array)
+          attendanceRecord = res.attendance[res.attendance.length - 1];
+        }
       }
-      return { employeeId, attendanceId };
+      return { employeeId, attendanceId, attendanceRecord };
     } catch (err: any) {
       return thunkAPI.rejectWithValue('Failed to fetch attendanceId');
     }
@@ -107,6 +127,8 @@ export const fetchAttendance = createAsyncThunk<any[], {
       if (params.endDate) query.append('endDate', params.endDate);
       if (params.order) query.append('order', params.order);
       const url = `${ENDPOINTS.attendance.all}?${query.toString()}`;
+      console.log('[FRONTEND] fetchAttendance URL:', url);
+      console.log('[FRONTEND] fetchAttendance params:', params);
       const res = await http<{ attendance: any[] }>(url);
       return res.attendance || [];
     } catch (err: any) {
@@ -117,7 +139,7 @@ export const fetchAttendance = createAsyncThunk<any[], {
 
 const attendanceSlice = createSlice({
   name: 'attendance',
-  initialState: { isClockingIn: false, isClockingOut: false, error: null as string | null, attendanceIds: {} as Record<string, string | null>, attendanceList: [] as any[], isLoadingAttendance: false },
+  initialState: { isClockingIn: false, isClockingOut: false, error: null as string | null, attendanceIds: {} as Record<string, string | null>, attendanceRecords: {} as Record<string, any | null>, attendanceList: [] as any[], isLoadingAttendance: false },
   reducers: {},
   extraReducers: (builder) => {
     builder
@@ -127,8 +149,13 @@ const attendanceSlice = createSlice({
       .addCase(clockOut.pending, (state) => { state.isClockingOut = true; state.error = null; })
       .addCase(clockOut.fulfilled, (state) => { state.isClockingOut = false; })
       .addCase(clockOut.rejected, (state, action) => { state.isClockingOut = false; state.error = action.payload as string; })
+      .addCase(updateAttendanceRecord.pending, (state) => { state.isLoadingAttendance = true; state.error = null; })
+      .addCase(updateAttendanceRecord.fulfilled, (state) => { state.isLoadingAttendance = false; })
+      .addCase(updateAttendanceRecord.rejected, (state, action) => { state.isLoadingAttendance = false; state.error = action.payload as string; })
       .addCase(fetchAttendanceId.fulfilled, (state, action) => {
         state.attendanceIds[action.payload.employeeId] = action.payload.attendanceId;
+        // Store the open attendance record (with image) for this employee
+        state.attendanceRecords[action.payload.employeeId] = action.payload.attendanceRecord || null;
       })
       .addCase(fetchAllAttendance.pending, (state) => { state.isLoadingAttendance = true; state.error = null; })
       .addCase(fetchAllAttendance.fulfilled, (state, action) => {

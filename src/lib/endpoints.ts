@@ -1,4 +1,4 @@
-export const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5678/api";
+export const BASE_URL = "https://drenterprise.onrender.com/api";
 
 export const ENDPOINTS = {
   manager: {
@@ -14,10 +14,13 @@ export const ENDPOINTS = {
     all: `${BASE_URL}/employee/all`,
     single: (id: string) => `${BASE_URL}/employee/${id}`,
     add: `${BASE_URL}/employee`,
+    addByManager: `${BASE_URL}/employee/manager`,
   },
   attendance: {
     stepIn: `${BASE_URL}/attendence/step-in`,
+    stepOut: `${BASE_URL}/attendence/step-out`,
     byEmployee: (id: string) => `${BASE_URL}/attendence/${id}`,
+    single: (id: string) => `${BASE_URL}/attendence/${id}`,
     all: `${BASE_URL}/attendence`,
   },
   dashboard: `${BASE_URL}/dashboard`,

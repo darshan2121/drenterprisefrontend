@@ -107,9 +107,9 @@ export function EditReportModal({ report }: { report: Report }) {
                 <SelectValue placeholder="Select a shift" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="9 AM - 5 PM">9 AM - 5 PM</SelectItem>
-                <SelectItem value="1 PM - 9 PM">1 PM - 9 PM</SelectItem>
-                <SelectItem value="5 PM - 1 AM">5 PM - 1 AM</SelectItem>
+                <SelectItem value="7 AM - 3 PM">7 AM - 3 PM (Morning)</SelectItem>
+                <SelectItem value="2 PM - 10 PM">2 PM - 10 PM (Evening)</SelectItem>
+                <SelectItem value="10 PM - 7 AM">10 PM - 7 AM (Night)</SelectItem>
                 <SelectItem value="-">-</SelectItem>
               </SelectContent>
             </Select>

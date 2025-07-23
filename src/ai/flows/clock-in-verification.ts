@@ -74,13 +74,6 @@ Return your response in the following JSON format:
   `,
 });
 
-const ttsPrompt = ai.definePrompt({
-  name: 'ttsPrompt',
-  input: {schema: z.object({text: z.string()})},
-  output: {schema: z.any()},
-  prompt: `{{{text}}}`,
-});
-
 async function toWav(
     pcmData: Buffer,
     channels = 1,
@@ -94,7 +87,7 @@ async function toWav(
       bitDepth: sampleWidth * 8,
     });
 
-    let bufs = [] as any[];
+    const bufs: any[] = [];
     writer.on('error', reject);
     writer.on('data', function (d) {
       bufs.push(d);

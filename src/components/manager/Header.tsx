@@ -17,63 +17,70 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
 
 export function Header() {
   const [managerName, setManagerName] = useState<string>("");
   const [managerEmail, setManagerEmail] = useState<string>("");
+  const [mounted, setMounted] = useState(false);
+  const { logout } = useAuth();
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      setManagerName(localStorage.getItem("managerName") || "");
-      setManagerEmail(localStorage.getItem("managerEmail") || "");
-    }
+    setMounted(true);
+    setManagerName(localStorage.getItem("managerName") || "");
+    setManagerEmail(localStorage.getItem("managerEmail") || "");
   }, []);
 
+  if (!mounted) return null;
+
   return (
-    <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center">
-        <div className="mr-auto flex">
-          <Link href="/manager/dashboard" className="flex items-center space-x-2">
-            <Image src="/dr-enterprise-logo.png" alt="D.R. Enterprise Logo" width={128} height={128} className="h-10 w-10" />
-            <span className="font-bold sm:hidden">D.R. Enterprise</span>
-          </Link>
+    <header className="sticky top-0 z-40 flex h-14 items-center border-b bg-background px-4 justify-between">
+      {/* Logo always visible on the left */}
+      <div className="flex items-center gap-2">
+        <Link href="/manager/dashboard" className="flex items-center gap-2">
+          <Image src="/dr-enterprise-logo.png" alt="D.R. Enterprise Logo" width={32} height={32} className="h-8 w-8" />
+          <span className="font-semibold hidden md:inline">D.R. Enterprise</span>
+        </Link>
+      </div>
+      <div className="flex items-center space-x-2 sm:space-x-4">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Avatar className="h-8 w-8 sm:h-9 sm:w-9">
+            <AvatarImage src="https://placehold.co/40x40.png" alt="Manager" data-ai-hint="person woman" />
+            <AvatarFallback className="text-sm">{managerName.charAt(0) || "S"}</AvatarFallback>
+          </Avatar>
+          <div className="flex-col hidden xs:flex">
+            <span className="text-sm font-semibold truncate max-w-[120px]">{managerName || "Supervisor"}</span>
+            <span className="text-xs text-muted-foreground truncate max-w-[120px]">
+              {managerEmail || "manager@example.com"}
+            </span>
+          </div>
         </div>
-        <div className="flex items-center justify-end space-x-4">
-            <div className="flex items-center gap-3">
-              <Avatar className="h-9 w-9">
-                <AvatarImage src="https://placehold.co/40x40.png" alt="Manager" data-ai-hint="person woman" />
-                <AvatarFallback>M</AvatarFallback>
-              </Avatar>
-              <div className="flex-col hidden sm:flex">
-                <span className="text-sm font-semibold">{managerName || "Manager"}</span>
-                <span className="text-xs text-muted-foreground">
-                  {managerEmail || "manager@example.com"}
-                </span>
-              </div>
-            </div>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="outline">
-                <LogOut className="mr-0 sm:mr-2 h-4 w-4" />
-                <span className="hidden sm:inline">Logout</span>
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Are you sure you want to log out?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  You will be redirected to the login page.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction asChild>
-                  <Link href="/login">Logout</Link>
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="p-2 sm:p-2 rounded-full sm:rounded-md min-w-[44px] min-h-[44px] flex items-center justify-center"
+            >
+              <LogOut className="h-4 w-4 sm:h-4 sm:w-4" />
+              <span className="hidden sm:inline ml-2">Logout</span>
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure you want to log out?</AlertDialogTitle>
+              <AlertDialogDescription>
+                You will be redirected to the login page.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction asChild>
+                <button onClick={logout}>Logout</button>
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </header>
   );
