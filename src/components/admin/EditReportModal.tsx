@@ -24,7 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Edit, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useDispatch } from 'react-redux';
-import { updateAttendanceRecord } from '@/store/slices/attendanceSlice';
+import { updateAttendanceRecord, fetchAttendance } from '@/store/slices/attendanceSlice';
 
 type Report = {
     date: string;
@@ -39,16 +39,27 @@ type Report = {
     id?: string;
 };
 
-export function EditReportModal({ report, onRefresh }: { report: Report, onRefresh?: () => void }) {
+export function EditReportModal({ 
+  report, 
+  onRefresh,
+  filters // Add filters prop to refresh with same filters
+}: { 
+  report: Report;
+  onRefresh?: () => void;
+  filters?: {
+    managerId?: string;
+    employeeId?: string;
+    startDate?: string;
+    endDate?: string;
+    order?: string;
+  };
+}) {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
   const dispatch = useDispatch();
 
   const [location, setLocation] = useState(report.location);
-  // Remove status state
-  // const [status, setStatus] = useState<Report['status']>(report.status);
-  // Only allow 'morning', 'evening', 'night' for shift
   const [shift, setShift] = useState(report.shift);
   const [clockIn, setClockIn] = useState(report.clockIn);
   const [clockOut, setClockOut] = useState(report.clockOut);
@@ -59,14 +70,15 @@ export function EditReportModal({ report, onRefresh }: { report: Report, onRefre
       const attendanceId = report._id || report.attendanceId || report.id;
       if (!attendanceId) throw new Error('Attendance ID is missing');
       
+      // Convert clockIn and clockOut to ISO strings using the report date (local time, no 'Z')
+      const stepIn = clockIn ? new Date(`${report.date}T${clockIn}:00`).toISOString() : undefined;
+      const stepOut = clockOut ? new Date(`${report.date}T${clockOut}:00`).toISOString() : undefined;
+
       const updateData = {
-        date: report.date,
-        employee: report.employee,
-        shift, // send as 'morning', 'evening', or 'night'
-        location,
-        // status, // removed
-        clockIn,
-        clockOut,
+        shift,
+        address: location,
+        stepIn,
+        stepOut,
       };
 
       await dispatch(updateAttendanceRecord({ id: attendanceId, data: updateData }) as any);
@@ -92,7 +104,6 @@ export function EditReportModal({ report, onRefresh }: { report: Report, onRefre
   const handleOpenChange = (open: boolean) => {
     if (open) {
         setLocation(report.location);
-        // setStatus(report.status); // removed
         setShift(report.shift);
         setClockIn(report.clockIn);
         setClockOut(report.clockOut);
@@ -116,7 +127,6 @@ export function EditReportModal({ report, onRefresh }: { report: Report, onRefre
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
-          {/* Status field removed */}
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="shift" className="text-right">Shift</Label>
             <Select value={shift} onValueChange={setShift} disabled={isLoading}>
@@ -124,9 +134,9 @@ export function EditReportModal({ report, onRefresh }: { report: Report, onRefre
                 <SelectValue placeholder="Select a shift" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="morning">9 AM - 5 PM (Morning)</SelectItem>
-                <SelectItem value="evening">1 PM - 9 PM (Evening)</SelectItem>
-                <SelectItem value="night">5 PM - 1 AM (Night)</SelectItem>
+                <SelectItem value="morning">7 AM - 3 PM (Morning)</SelectItem>
+                <SelectItem value="evening">2 PM - 10 PM (Evening)</SelectItem>
+                <SelectItem value="night">10 PM - 7 AM (Night)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -138,6 +148,7 @@ export function EditReportModal({ report, onRefresh }: { report: Report, onRefre
                 onChange={(e) => setClockIn(e.target.value)} 
                 className="col-span-3" 
                 disabled={isLoading}
+                placeholder="HH:MM"
             />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
@@ -148,6 +159,7 @@ export function EditReportModal({ report, onRefresh }: { report: Report, onRefre
                 onChange={(e) => setClockOut(e.target.value)} 
                 className="col-span-3" 
                 disabled={isLoading}
+                placeholder="HH:MM"
             />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">

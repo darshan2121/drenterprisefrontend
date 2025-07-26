@@ -139,8 +139,21 @@ export const fetchAttendance = createAsyncThunk<any[], {
 
 const attendanceSlice = createSlice({
   name: 'attendance',
-  initialState: { isClockingIn: false, isClockingOut: false, error: null as string | null, attendanceIds: {} as Record<string, string | null>, attendanceRecords: {} as Record<string, any | null>, attendanceList: [] as any[], isLoadingAttendance: false },
-  reducers: {},
+  initialState: { 
+    isClockingIn: false, 
+    isClockingOut: false, 
+    error: null as string | null, 
+    attendanceIds: {} as Record<string, string | null>, 
+    attendanceRecords: {} as Record<string, any | null>, 
+    attendanceList: [] as any[], 
+    isLoadingAttendance: false,
+    isUpdating: false
+  },
+  reducers: {
+    clearError: (state) => {
+      state.error = null;
+    }
+  },
   extraReducers: (builder) => {
     builder
       .addCase(clockIn.pending, (state) => { state.isClockingIn = true; state.error = null; })
@@ -149,9 +162,24 @@ const attendanceSlice = createSlice({
       .addCase(clockOut.pending, (state) => { state.isClockingOut = true; state.error = null; })
       .addCase(clockOut.fulfilled, (state) => { state.isClockingOut = false; })
       .addCase(clockOut.rejected, (state, action) => { state.isClockingOut = false; state.error = action.payload as string; })
-      .addCase(updateAttendanceRecord.pending, (state) => { state.isLoadingAttendance = true; state.error = null; })
-      .addCase(updateAttendanceRecord.fulfilled, (state) => { state.isLoadingAttendance = false; })
-      .addCase(updateAttendanceRecord.rejected, (state, action) => { state.isLoadingAttendance = false; state.error = action.payload as string; })
+      .addCase(updateAttendanceRecord.pending, (state) => { 
+        state.isUpdating = true; 
+        state.error = null; 
+      })
+      .addCase(updateAttendanceRecord.fulfilled, (state, action) => { 
+        state.isUpdating = false;
+        // Optionally update the specific record in the list
+        const { id, data } = action.payload;
+        const index = state.attendanceList.findIndex(record => record._id === id);
+        if (index !== -1) {
+          // Update the record with new data
+          state.attendanceList[index] = { ...state.attendanceList[index], ...data };
+        }
+      })
+      .addCase(updateAttendanceRecord.rejected, (state, action) => { 
+        state.isUpdating = false; 
+        state.error = action.payload as string; 
+      })
       .addCase(fetchAttendanceId.fulfilled, (state, action) => {
         state.attendanceIds[action.payload.employeeId] = action.payload.attendanceId;
         // Store the open attendance record (with image) for this employee
@@ -178,4 +206,5 @@ const attendanceSlice = createSlice({
   }
 });
 
-export default attendanceSlice.reducer; 
+export const { clearError } = attendanceSlice.actions;
+export default attendanceSlice.reducer;

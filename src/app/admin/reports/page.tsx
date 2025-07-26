@@ -4,7 +4,7 @@ import { ReportsFilter } from "@/components/admin/ReportsFilter";
 import { ReportsTable } from "@/components/admin/ReportsTable";
 import { Card } from "@/components/ui/card";
 import { useDispatch, useSelector } from "react-redux";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { fetchAttendance } from "@/store/slices/attendanceSlice";
 import { RootState } from "@/store";
 import { format } from "date-fns";
@@ -14,21 +14,19 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { EditReportModal } from "@/components/admin/EditReportModal";
 import { authService } from "@/services/authService";
 import { useRouter } from "next/navigation";
+import { HeaderActions } from "@/components/admin/ReportsTable";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import * as XLSX from "xlsx";
 
 export default function ReportsPage() {
     const router = useRouter();
     const isReadonly = authService.getCurrentUser()?.role === "readonly";
 
-    // Redirect if not readonly
-    // useEffect(() => {
-    //   if (!isReadonly) {
-    //     router.replace("/admin/dashboard");
-    //   }
-    // }, [isReadonly, router]);
-
     const dispatch = useDispatch();
     const attendanceList = useSelector((state: RootState) => state.attendance.attendanceList);
     const isLoading = useSelector((state: RootState) => state.attendance.isLoadingAttendance);
+    const isUpdating = useSelector((state: RootState) => state.attendance.isUpdating);
 
     // Fetch managers and employees from backend
     const [managers, setManagers] = useState<{ name: string; _id: string }[]>([]);
@@ -56,12 +54,15 @@ export default function ReportsPage() {
     const [filters, setFilters] = useState({
       managerId: "",
       employeeId: "",
+      shift: "",
+      date: undefined as Date | undefined,
       startDate: undefined as string | undefined,
       endDate: undefined as string | undefined,
       order: "desc",
     });
 
-    useEffect(() => {
+    // Memoized fetch function
+    const fetchAttendanceData = useCallback(() => {
       dispatch(
         fetchAttendance({
           managerId: filters.managerId || undefined,
@@ -72,6 +73,10 @@ export default function ReportsPage() {
         }) as any
       );
     }, [filters.managerId, filters.employeeId, filters.startDate, filters.endDate, filters.order, dispatch]);
+
+    useEffect(() => {
+      fetchAttendanceData();
+    }, [fetchAttendanceData]);
 
     // Convert API data to expected format
     const formattedReports = attendanceList.map(att => ({
@@ -87,17 +92,23 @@ export default function ReportsPage() {
         totalTime: att.totalTime || '',
     }));
 
-    const handleRefresh = () => {
-      dispatch(
-        fetchAttendance({
-          managerId: filters.managerId || undefined,
-          employeeId: filters.employeeId || undefined,
-          startDate: filters.startDate,
-          endDate: filters.endDate,
-          order: filters.order,
-        }) as any
-      );
-    };
+    // Apply all filters on the frontend
+    const filteredReports = formattedReports.filter(report => {
+      const matchManager = !filters.managerId || (report.employee && employees.find(e => e._id === filters.managerId && e.name === report.employee));
+      const matchEmployee = !filters.employeeId || (report.employee && employees.find(e => e._id === filters.employeeId && e.name === report.employee));
+      const matchShift = !filters.shift || report.shift === filters.shift;
+      const matchDate = !filters.date || report.date === format(filters.date, 'yyyy-MM-dd');
+      return matchManager && matchEmployee && matchShift && matchDate;
+    });
+
+    // Updated refresh handler that ensures data is refreshed
+    const handleRefresh = useCallback(async () => {
+      try {
+        await fetchAttendanceData();
+      } catch (error) {
+        console.error('Failed to refresh data:', error);
+      }
+    }, [fetchAttendanceData]);
 
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -128,6 +139,8 @@ export default function ReportsPage() {
                   managers={managers}
                   onManagerChange={(id) => setFilters((f) => ({ ...f, managerId: id }))}
                   onEmployeeChange={(id) => setFilters((f) => ({ ...f, employeeId: id }))}
+                  onShiftChange={(shift) => setFilters((f) => ({ ...f, shift }))}
+                  onDateChange={(date) => setFilters((f) => ({ ...f, date }))}
                 />
               </div>
             )}
@@ -144,29 +157,121 @@ export default function ReportsPage() {
               </div>
             ) : (
               <div className="overflow-hidden">
+                {/* Show updating indicator */}
+                {isUpdating && (
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-400 p-4 mb-4">
+                    <div className="flex items-center">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500 mr-2"></div>
+                      <span className="text-sm text-blue-700 dark:text-blue-300">Updating report...</span>
+                    </div>
+                  </div>
+                )}
+
                 {/* Mobile: Card-based layout, Desktop: Table layout */}
                 <div className="block sm:hidden">
                   {/* Mobile Cards Layout */}
                   <div className="p-4 space-y-3">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                        Reports ({formattedReports.length})
+                        Reports ({filteredReports.length})
                       </h3>
-                      <button
-                        onClick={handleRefresh}
-                        className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                      >
-                        Refresh
-                      </button>
+                      <div className="flex gap-2">
+                        <HeaderActions
+                          onDownloadPdf={() => {
+                            const doc = new jsPDF();
+                            doc.text("Attendance Report", 14, 16);
+                            autoTable(doc, {
+                              head: [[
+                                "Date",
+                                "Employee",
+                                "Shift",
+                                "Location",
+                                "Status",
+                                "Clock In",
+                                "Clock Out",
+                              ]],
+                              body: filteredReports.map((report) => [
+                                report.date,
+                                report.employee,
+                                report.shift,
+                                report.location,
+                                report.status,
+                                report.clockIn,
+                                report.clockOut,
+                              ]),
+                              startY: 20,
+                            });
+                            if (
+                              typeof window !== "undefined" &&
+                              !!window.ReactNativeWebView
+                            ) {
+                              const pdfBase64 = doc.output("datauristring");
+                              window.ReactNativeWebView?.postMessage(
+                                JSON.stringify({
+                                  type: "download",
+                                  fileType: "pdf",
+                                  fileName: "attendance-report.pdf",
+                                  data: pdfBase64,
+                                })
+                              );
+                            } else {
+                              doc.save("attendance-report.pdf");
+                            }
+                          }}
+                          onDownloadXls={() => {
+                            const worksheet = XLSX.utils.json_to_sheet(
+                              filteredReports.map((report) => ({
+                                Date: report.date,
+                                Employee: report.employee,
+                                Shift: report.shift,
+                                Location: report.location,
+                                Status: report.status,
+                                "Clock In": report.clockIn,
+                                "Clock Out": report.clockOut,
+                              }))
+                            );
+                            const workbook = XLSX.utils.book_new();
+                            XLSX.utils.book_append_sheet(
+                              workbook,
+                              worksheet,
+                              "Attendance"
+                            );
+                            if (
+                              typeof window !== "undefined" &&
+                              !!window.ReactNativeWebView
+                            ) {
+                              const wbout = XLSX.write(workbook, {
+                                type: "base64",
+                                bookType: "xlsx",
+                              });
+                              window.ReactNativeWebView?.postMessage(
+                                JSON.stringify({
+                                  type: "download",
+                                  fileType: "xlsx",
+                                  fileName: "attendance-report.xlsx",
+                                  data: wbout,
+                                })
+                              );
+                            } else {
+                              XLSX.writeFile(
+                                workbook,
+                                "attendance-report.xlsx"
+                              );
+                            }
+                          }}
+                          onRefresh={handleRefresh}
+                          loading={isLoading || isUpdating}
+                        />
+                      </div>
                     </div>
                     
-                    {formattedReports.length === 0 ? (
+                    {filteredReports.length === 0 ? (
                       <div className="text-center py-8 text-gray-500 dark:text-gray-400">
                         No reports found
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        {formattedReports.map((report) => (
+                        {filteredReports.map((report) => (
                           <div key={report._id} className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
                             <div className="flex items-center justify-between mb-2">
                               <h4 className="font-medium text-gray-900 dark:text-gray-100 truncate pr-2">
@@ -225,10 +330,21 @@ export default function ReportsPage() {
                               </div>
                             )}
                             {/* Action Buttons */}
-                            <div className="flex gap-2 pt-4">
-                              <EditReportModal report={report} onRefresh={handleRefresh} />
-                              {/* If you have a delete report button/modal, add it here */}
-                            </div>
+                            {!isReadonly && (
+                              <div className="flex gap-2 pt-4">
+                                <EditReportModal 
+                                  report={report} 
+                                  onRefresh={handleRefresh}
+                                  filters={{
+                                    managerId: filters.managerId,
+                                    employeeId: filters.employeeId,
+                                    startDate: filters.startDate,
+                                    endDate: filters.endDate,
+                                    order: filters.order,
+                                  }}
+                                />
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -238,7 +354,19 @@ export default function ReportsPage() {
 
                 {/* Desktop Table Layout */}
                 <div className="hidden sm:block">
-                  <ReportsTable reports={formattedReports} onRefresh={handleRefresh} disableActions={isReadonly} />
+                  <ReportsTable 
+                    reports={filteredReports} 
+                    onRefresh={handleRefresh} 
+                    disableActions={isReadonly}
+                    loading={isLoading || isUpdating}
+                    filters={{
+                      managerId: filters.managerId,
+                      employeeId: filters.employeeId,
+                      startDate: filters.startDate,
+                      endDate: filters.endDate,
+                      order: filters.order,
+                    }}
+                  />
                 </div>
               </div>
             )}

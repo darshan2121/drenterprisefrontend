@@ -27,20 +27,26 @@ type Props = {
     managers: { name: string; _id: string }[];
     onManagerChange?: (id: string) => void;
     onEmployeeChange?: (id: string) => void;
+    onShiftChange?: (shift: string) => void;
+    onDateChange?: (date: Date | undefined) => void;
 }
 
-export function ReportsFilter({ employees, managers, onManagerChange, onEmployeeChange }: Props) {
+export function ReportsFilter({ employees, managers, onManagerChange, onEmployeeChange, onShiftChange, onDateChange }: Props) {
     const [date, setDate] = React.useState<Date>();
     const [selectedManager, setSelectedManager] = React.useState<string>("");
     const [selectedEmployee, setSelectedEmployee] = React.useState<string>("");
+    const [selectedShift, setSelectedShift] = React.useState<string>("");
     const isMobile = useIsMobile();
   
     const handleClear = () => {
       setDate(undefined);
       setSelectedManager("");
       setSelectedEmployee("");
+      setSelectedShift("");
       onManagerChange?.("");
       onEmployeeChange?.("");
+      onShiftChange?.("");
+      onDateChange?.(undefined);
     };
   
     return (
@@ -64,7 +70,10 @@ export function ReportsFilter({ employees, managers, onManagerChange, onEmployee
                 <Calendar
                   mode="single"
                   selected={date}
-                  onSelect={setDate}
+                  onSelect={(d) => {
+                    setDate(d);
+                    onDateChange?.(d);
+                  }}
                   initialFocus
                 />
               </PopoverContent>
@@ -95,6 +104,22 @@ export function ReportsFilter({ employees, managers, onManagerChange, onEmployee
               </SelectTrigger>
               <SelectContent>
                 {employees.map(e => <SelectItem key={e._id} value={e._id}>{e.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select
+              value={selectedShift}
+              onValueChange={(val) => {
+                setSelectedShift(val);
+                onShiftChange?.(val);
+              }}
+            >
+              <SelectTrigger className="h-10 sm:h-9 text-sm sm:text-base">
+                <SelectValue placeholder="Filter by Shift" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="morning">Morning</SelectItem>
+                <SelectItem value="evening">Evening</SelectItem>
+                <SelectItem value="night">Night</SelectItem>
               </SelectContent>
             </Select>
           </div>
