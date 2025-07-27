@@ -5,7 +5,8 @@ import {
   markStepOut,
   getEmployeeAttendance,
   getAllAttendance,
-  updateAttendance
+  updateAttendance,
+  bulkUpdateAttendance
 } from "../controller/attendence.controller.js";
 import { authenticateUser } from "../utils/middlewere.js";
 
@@ -47,6 +48,8 @@ router.post("/step-in", authenticateUser,upload.single("stepInImage"), markStepI
 // Update attendance by attendance ID (supports all fields including stepOut)
 router.put("/:attendanceId", authenticateUser,upload.single("stepInImage"), updateAttendance);
 
+// bulk update
+router.post("/bulk-update", authenticateUser, bulkUpdateAttendance);
 
 // Step out: parse FormData with no file
 router.post("/step-out", authenticateUser, upload.none(), markStepOut);

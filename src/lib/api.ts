@@ -3,7 +3,7 @@ import { ENDPOINTS } from './endpoints';
 import { http } from './http';
 
 // Manual switch: set to true for local, false for production
-const USE_LOCAL_BACKEND = false;
+const USE_LOCAL_BACKEND = true;
 
 // API Configuration
 const API_CONFIG = {

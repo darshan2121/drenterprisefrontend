@@ -1,4 +1,5 @@
-export const BASE_URL = "https://drenterprise.onrender.com/api";
+// export const BASE_URL = "https://drenterprise.onrender.com/api";
+export const BASE_URL = "http://localhost:5678/api"
 
 export const ENDPOINTS = {
   manager: {

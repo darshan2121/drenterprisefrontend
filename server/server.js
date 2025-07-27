@@ -15,7 +15,7 @@ import { autoStepOut } from './controller/cron.controller.js';
 
 dotenv.config();
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5678;
 const MONGO_URI = process.env.MONGODB_URI ;
 app.use(cors(
     {
