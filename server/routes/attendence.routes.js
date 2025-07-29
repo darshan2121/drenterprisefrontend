@@ -48,7 +48,7 @@ router.post("/step-in", authenticateUser,upload.single("stepInImage"), markStepI
 // Update attendance by attendance ID (supports all fields including stepOut)
 router.put("/:attendanceId", authenticateUser,upload.single("stepInImage"), updateAttendance);
 
-// Bulk update attendance records
+// bulk update
 router.post("/bulk-update", authenticateUser, bulkUpdateAttendance);
 
 // Step out: parse FormData with no file
