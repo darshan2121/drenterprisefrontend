@@ -83,24 +83,47 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
   useEffect(() => {
     if (isOpen) {
       console.log("[DEBUG] Modal opened for", employee.name, "employeeId:", employee.id);
-      // Get geolocation
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            setLatitude(position.coords.latitude.toString());
-            setLongitude(position.coords.longitude.toString());
-          },
-          (error) => {
-            // Fallback to static coordinates (Bangalore example), no toast
-            setLatitude("12.9716");
-            setLongitude("77.5946");
-          }
-        );
-      } else {
-        // If geolocation is not available at all, no toast
-        setLatitude("12.9716");
-        setLongitude("77.5946");
-      }
+      
+      // Enhanced location handling for mobile WebView
+      const getLocation = () => {
+        // Check if location is injected by React Native WebView
+        if (typeof window !== 'undefined' && (window as any).injectedLocation) {
+          const injectedLocation = (window as any).injectedLocation;
+          console.log("[DEBUG] Using injected location from React Native:", injectedLocation);
+          setLatitude(injectedLocation.latitude.toString());
+          setLongitude(injectedLocation.longitude.toString());
+          return;
+        }
+        
+        // Fallback to browser geolocation
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              console.log("[DEBUG] Using browser geolocation:", position.coords);
+              setLatitude(position.coords.latitude.toString());
+              setLongitude(position.coords.longitude.toString());
+            },
+            (error) => {
+              console.warn("[DEBUG] Geolocation error:", error);
+              // Fallback to static coordinates (Bangalore example)
+              setLatitude("12.9716");
+              setLongitude("77.5946");
+            },
+            {
+              enableHighAccuracy: true,
+              timeout: 10000,
+              maximumAge: 300000 // 5 minutes cache
+            }
+          );
+        } else {
+          console.warn("[DEBUG] Geolocation not available, using fallback");
+          setLatitude("12.9716");
+          setLongitude("77.5946");
+        }
+      };
+      
+      getLocation();
+      
       // Fetch current attendance status from Redux
       dispatch(fetchAttendanceId(employee.id) as any);
     }

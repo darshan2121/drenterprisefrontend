@@ -23,11 +23,12 @@ export const ENDPOINTS = {
     byEmployee: (id: string) => `${BASE_URL}/attendence/${id}`,
     single: (id: string) => `${BASE_URL}/attendence/${id}`,
     all: `${BASE_URL}/attendence`,
+    bulkUpdate: `${BASE_URL}/attendence/bulk-update`,
+    update: (id: string) => `${BASE_URL}/attendence/${id}`,
   },
   dashboard: `${BASE_URL}/dashboard`,
   auth: {
     forgotPassword: `${BASE_URL}/auth/forgot-password`,
     verifyOtp: `${BASE_URL}/auth/verify-otp`,
   },
-}; 
- 
+};
