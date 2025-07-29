@@ -145,60 +145,7 @@ export const updateAttendance = async (req, res) => {
 };
 
 
-export const bulkUpdateAttendance = async (req, res) => {
-  try {
-    const { attendanceIds, stepIn, stepOut, shift } = req.body;
 
-    // Validate input
-    if (!attendanceIds || !Array.isArray(attendanceIds)) {
-      return res.status(400).json({ message: "attendanceIds must be an array" });
-    }
-
-    if (attendanceIds.length === 0) {
-      return res.status(400).json({ message: "No attendance records selected" });
-    }
-
-    // Prepare update data
-    const updateData = {};
-    if (stepIn !== undefined) updateData.stepIn = new Date(stepIn);
-    if (stepOut !== undefined) updateData.stepOut = new Date(stepOut);
-    if (shift !== undefined) updateData.shift = shift;
-
-    // If both stepIn and stepOut are provided, calculate totalTime
-    if (stepIn !== undefined && stepOut !== undefined) {
-      const stepInTime = new Date(stepIn);
-      const stepOutTime = new Date(stepOut);
-      updateData.totalTime = Math.floor((stepOutTime - stepInTime) / (1000 * 60)); // in minutes
-    }
-
-    // Update all selected attendance records
-    const result = await Attendance.updateMany(
-      { _id: { $in: attendanceIds } },
-      updateData,
-      { runValidators: true }
-    );
-
-    // Update employee working status if stepping out
-    if (stepOut !== undefined) {
-      // Get all affected employeeIds
-      const attendances = await Attendance.find({ _id: { $in: attendanceIds } });
-      const employeeIds = [...new Set(attendances.map(a => a.employeeId))];
-      
-      await Employee.updateMany(
-        { _id: { $in: employeeIds } },
-        { isWorking: false }
-      );
-    }
-
-    res.status(200).json({
-      message: `Successfully updated ${result.modifiedCount} attendance records`,
-      modifiedCount: result.modifiedCount
-    });
-  } catch (error) {
-    console.error("Error bulk updating attendance:", error);
-    res.status(500).json({ message: "Error bulk updating attendance", error });
-  }
-};
 
 
 // Mark step out
