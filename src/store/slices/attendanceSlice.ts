@@ -72,26 +72,6 @@ export const updateAttendanceRecord = createAsyncThunk<any, { id: string, data: 
   }
 );
 
-export const bulkUpdateAttendance = createAsyncThunk<any, {
-  attendanceIds: string[];
-  stepIn: string;
-  stepOut: string;
-  shift: string;
-}>(
-  'attendance/bulkUpdateAttendance',
-  async (bulkData, thunkAPI) => {
-    try {
-      const res = await http(ENDPOINTS.attendance.bulkUpdate, {
-        method: 'POST',
-        body: JSON.stringify(bulkData),
-      });
-      return res;
-    } catch (err: any) {
-      return thunkAPI.rejectWithValue(err.message || 'Failed to bulk update attendance');
-    }
-  }
-);
-
 export const fetchAttendanceId = createAsyncThunk<{ employeeId: string, attendanceId: string | null, attendanceRecord?: any }, string>(
   'attendance/fetchAttendanceId',
   async (employeeId, thunkAPI) => {
@@ -136,7 +116,6 @@ export const fetchAttendance = createAsyncThunk<any[], {
   startDate?: string;
   endDate?: string;
   order?: string;
-  _timestamp?: number;
 }>(
   'attendance/fetchAttendance',
   async (params, thunkAPI) => {
@@ -147,8 +126,9 @@ export const fetchAttendance = createAsyncThunk<any[], {
       if (params.startDate) query.append('startDate', params.startDate);
       if (params.endDate) query.append('endDate', params.endDate);
       if (params.order) query.append('order', params.order);
-      if (params._timestamp) query.append('_t', params._timestamp.toString()); // Add timestamp for cache busting
       const url = `${ENDPOINTS.attendance.all}?${query.toString()}`;
+      console.log('[FRONTEND] fetchAttendance URL:', url);
+      console.log('[FRONTEND] fetchAttendance params:', params);
       const res = await http<{ attendance: any[] }>(url);
       return res.attendance || [];
     } catch (err: any) {
@@ -197,18 +177,6 @@ const attendanceSlice = createSlice({
         }
       })
       .addCase(updateAttendanceRecord.rejected, (state, action) => { 
-        state.isUpdating = false; 
-        state.error = action.payload as string; 
-      })
-      .addCase(bulkUpdateAttendance.pending, (state) => { 
-        state.isUpdating = true; 
-        state.error = null; 
-      })
-      .addCase(bulkUpdateAttendance.fulfilled, (state) => { 
-        state.isUpdating = false;
-        // The data will be refreshed by calling fetchAttendance after bulk update
-      })
-      .addCase(bulkUpdateAttendance.rejected, (state, action) => { 
         state.isUpdating = false; 
         state.error = action.payload as string; 
       })
