@@ -34,7 +34,7 @@ type Employee = { id: string; name: string; email: string; manager: string; stat
 type Manager = { _id: string; name: string; };
 
 export function EmployeesList({ employees, managers }: { employees: Employee[], managers: Manager[] }) {
-  const isMobile = useIsMobile();
+  const { isMobile } = useIsMobile();
   const dispatch = useDispatch();
   const { toast } = useToast();
   const isReadonly = authService.getCurrentUser()?.role === "readonly";

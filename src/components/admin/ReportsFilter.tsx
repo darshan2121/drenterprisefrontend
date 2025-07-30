@@ -118,9 +118,9 @@ export function ReportsFilter({ employees, managers, onManagerChange, onEmployee
                 selectedShift && "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
               )}>
                 <SelectValue placeholder="Filter by Shift" />
-                {selectedShift && (
+                {/* {selectedShift && (
                   <div className="ml-2 w-2 h-2 bg-blue-500 rounded-full"></div>
-                )}
+                )} */}
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="morning">Morning</SelectItem>

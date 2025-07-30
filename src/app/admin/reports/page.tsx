@@ -614,9 +614,8 @@ export default function ReportsPage() {
                       startDate: filters.startDate,
                       endDate: filters.endDate,
                       order: filters.order,
+                      shift: filters.shift,
                     }}
-                    selectedShift={filters.shift}
-                    rawAttendanceData={attendanceList}
                   />
                 </div>
               </div>
