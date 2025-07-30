@@ -12,6 +12,7 @@ import employeeRoutes from './routes/employee.routes.js';
 import dashboardRoutes from "./routes/dashboard.routes.js";
 import attendenceRoutes from "./routes/attendence.routes.js"
 import { autoStepOut } from './controller/cron.controller.js';
+import { forgotPassword } from './controller/auth.controller.js';
 
 dotenv.config();
 const app = express();
