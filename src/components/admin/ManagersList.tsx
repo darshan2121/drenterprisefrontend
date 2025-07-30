@@ -34,7 +34,7 @@ import { authService } from "@/services/authService";
 
 export function ManagersList() {
   const { managers, isLoading, error } = useSelector((state: any) => state.manager);
-  const { isMobile } = useIsMobile();
+  const isMobile = useIsMobile();
   const { toast } = useToast();
   const dispatch = useDispatch<AppDispatch>();
   const isReadonly = authService.getCurrentUser()?.role === "readonly";

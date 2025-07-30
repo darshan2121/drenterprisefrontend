@@ -295,7 +295,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { FileDown, RefreshCw, Loader2, Check, CheckCircle } from "lucide-react";
 import { EditReportModal } from "./EditReportModal";
-import { BulkUpdateModal } from "@/components/admin/BulkUpdateModal";
+import { BulkEditModal } from "@/components/admin/EditBulkEmployeeModal";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
@@ -372,8 +372,9 @@ export function ReportsTable({
     shift?: string;
   };
 }) {
-  const { isMobile } = useIsMobile();
+  const isMobile = useIsMobile();
   const [selectedReports, setSelectedReports] = useState<string[]>([]);
+  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [isAllSelected, setIsAllSelected] = useState(false);
 
   // Toggle selection for a single report
@@ -406,6 +407,7 @@ export function ReportsTable({
 
   // Handle bulk edit completion
   const handleBulkEditComplete = (success: boolean) => {
+    setIsBulkEditOpen(false);
     if (success) {
       setSelectedReports([]);
       setIsAllSelected(false);
@@ -497,30 +499,15 @@ export function ReportsTable({
   const EnhancedHeaderActions = () => (
     <div className="flex items-center gap-2">
       {isBulkEditAvailable && selectedReports.length > 0 && (
-        <BulkUpdateModal
-          selectedIds={selectedReports}
-          onSuccess={() => handleBulkEditComplete(true)}
-          currentFilters={filters || {}}
-          selectedRecords={selectedReports.map(id => {
-            const report = reports.find(r => r._id === id || r.id === id);
-            return {
-              _id: id,
-              date: report?.date || '',
-              stepIn: report?.clockIn || '',
-              stepOut: report?.clockOut || ''
-            };
-          })}
-          trigger={
-            <Button 
-              variant="default" 
-              size="sm" 
-              disabled={loading}
-            >
-              <CheckCircle className="mr-2 h-4 w-4" />
-              Bulk Edit ({selectedReports.length})
-            </Button>
-          }
-        />
+        <Button 
+          variant="default" 
+          size="sm" 
+          onClick={() => setIsBulkEditOpen(true)}
+          disabled={loading}
+        >
+          <CheckCircle className="mr-2 h-4 w-4" />
+          Bulk Edit ({selectedReports.length})
+        </Button>
       )}
       <HeaderActions 
         onDownloadPdf={handleDownloadPdf} 
@@ -664,7 +651,14 @@ export function ReportsTable({
           {reports.map(renderMobileCard)}
         </div>
 
-
+        {/* Bulk Edit Modal for mobile */}
+        <BulkEditModal
+          isOpen={isBulkEditOpen}
+          onClose={() => setIsBulkEditOpen(false)}
+          attendanceIds={selectedReports}
+          onComplete={handleBulkEditComplete}
+          shift={filters?.shift}
+        />
       </div>
     );
   }
@@ -694,7 +688,14 @@ export function ReportsTable({
         </div>
       </CardContent>
 
-
+      {/* Bulk Edit Modal */}
+      <BulkEditModal
+        isOpen={isBulkEditOpen}
+        onClose={() => setIsBulkEditOpen(false)}
+        attendanceIds={selectedReports}
+        onComplete={handleBulkEditComplete}
+        shift={filters?.shift}
+      />
     </>
   );
 }
