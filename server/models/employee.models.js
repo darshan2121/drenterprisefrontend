@@ -32,6 +32,10 @@ default:""
     type: Boolean,
     default: false
   },
+  image: {
+    type: String,
+    default: null
+  },
   isCreatedByAdmin: {
     type: Boolean,
     default: false

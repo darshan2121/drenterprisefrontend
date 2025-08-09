@@ -3,47 +3,113 @@ import Employee from "../models/employee.models.js";
 
 
 // Controller: createEmployee
+// export const createEmployee = async (req, res) => {
+//     try {
+//         const { email, name, mobile, address, managerId, shift, createdBy, isCreatedByAdmin } = req.body;
+//         // Log the incoming payload and clarify optional fields
+//         console.log('[CREATE EMPLOYEE] Payload:', req.body);
+//         console.log('[CREATE EMPLOYEE] Email and mobile are optional. Received email:', email, 'mobile:', mobile);
+//         // Validate required fields
+//         if (!name || !address || !managerId || !shift || isCreatedByAdmin === undefined || createdBy === undefined) {
+//             return res.status(400).json({ message: "All fields are required" });
+//         }
+//         const newEmployee = new Employee({ email, name, mobile, address, managerId, shift, createdBy, isCreatedByAdmin });
+//         await newEmployee.save();
+//         res.status(201).json({ message: "Employee created successfully", employee: newEmployee });
+//     } catch (error) {
+//         if (error.code === 11000) {
+//             return res.status(400).json({ message: "Email already exists" });
+//         }
+//         console.error("Error creating employee:", error);
+//         res.status(500).json({ message: "Error creating employee", error });
+//     }
+// };
+
 export const createEmployee = async (req, res) => {
-    try {
-        const { email, name, mobile, address, managerId, shift, createdBy, isCreatedByAdmin } = req.body;
-        // Log the incoming payload and clarify optional fields
-        console.log('[CREATE EMPLOYEE] Payload:', req.body);
-        console.log('[CREATE EMPLOYEE] Email and mobile are optional. Received email:', email, 'mobile:', mobile);
-        // Validate required fields
-        if (!name || !address || !managerId || !shift || isCreatedByAdmin === undefined || createdBy === undefined) {
-            return res.status(400).json({ message: "All fields are required" });
-        }
-        const newEmployee = new Employee({ email, name, mobile, address, managerId, shift, createdBy, isCreatedByAdmin });
-        await newEmployee.save();
-        res.status(201).json({ message: "Employee created successfully", employee: newEmployee });
-    } catch (error) {
-        if (error.code === 11000) {
-            return res.status(400).json({ message: "Email already exists" });
-        }
-        console.error("Error creating employee:", error);
-        res.status(500).json({ message: "Error creating employee", error });
+  try {
+    const { email, name, mobile, address, managerId, shift, createdBy, isCreatedByAdmin } = req.body;
+
+    console.log('[CREATE EMPLOYEE] Payload:', req.body);
+
+    if (!name || !address || !managerId || !shift || isCreatedByAdmin === undefined || createdBy === undefined) {
+      return res.status(400).json({ message: "All fields are required" });
     }
+
+    // If an image was uploaded, save its filename or path
+    let image = "";
+    if (req.file) {
+      image = req.file.filename; // or `${req.protocol}://${req.get("host")}/upload/${req.file.filename}` for full URL
+    }
+
+    const newEmployee = new Employee({
+      email,
+      name,
+      mobile,
+      address,
+      managerId,
+      shift,
+      createdBy,
+      isCreatedByAdmin,
+      image // optional image field
+    });
+
+    await newEmployee.save();
+    res.status(201).json({ message: "Employee created successfully", employee: newEmployee });
+  } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ message: "Email already exists" });
+    }
+    console.error("Error creating employee:", error);
+    res.status(500).json({ message: "Error creating employee", error });
+  }
 };
 
+
+
+// export const updateEmployee = async (req, res) => {
+//   try {
+//     const updateData = { ...req.body };
+
+//     const updatedEmployee = await Employee.findByIdAndUpdate(
+//       req.params.id,
+//       updateData,
+//       { new: true }
+//     );
+//     if (!updatedEmployee) {
+//       return res.status(404).json({ message: "Employee not found" });
+//     }
+//     res.status(200).json({ message: "Employee updated successfully", employee: updatedEmployee });
+//   } catch (error) {
+//     console.error("Error updating employee:", error);
+//     res.status(500).json({ message: "Error updating employee", error });
+//   }
+// }
 
 export const updateEmployee = async (req, res) => {
   try {
     const updateData = { ...req.body };
+
+    if (req.file) {
+      updateData.image = req.file.filename; // or full URL if needed
+    }
 
     const updatedEmployee = await Employee.findByIdAndUpdate(
       req.params.id,
       updateData,
       { new: true }
     );
+
     if (!updatedEmployee) {
       return res.status(404).json({ message: "Employee not found" });
     }
+
     res.status(200).json({ message: "Employee updated successfully", employee: updatedEmployee });
   } catch (error) {
     console.error("Error updating employee:", error);
     res.status(500).json({ message: "Error updating employee", error });
   }
-}
+};
+
 
 
 
