@@ -13,6 +13,7 @@ export interface Employee {
   shift: string;
   managerId: string;
   isWorking: boolean;
+  image?: string;
   createdAt: string;
   updatedAt: string;
   __v: number;

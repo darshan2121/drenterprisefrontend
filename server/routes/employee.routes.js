@@ -5,10 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 
-
-
 // Import controllers
-
 import{
     createEmployee,
     updateEmployee,
@@ -44,17 +41,8 @@ router.post("/", authenticateUser, upload.single("image"), createEmployee);
 // Update employee (with optional image)
 router.put("/:id", authenticateUser, upload.single("image"), updateEmployee);
 
-
-// router.post("/",authenticateUser,createEmployee)
-// router.put("/:id",authenticateUser,updateEmployee)
 router.delete("/:id",authenticateUser,deleteEmployee)
 router.get("/all",authenticateUser,getEmployees)
 router.post("/manager",authenticateUser,createEmployeeByManager)
-
-
-
-
-
-
 
 export default router;

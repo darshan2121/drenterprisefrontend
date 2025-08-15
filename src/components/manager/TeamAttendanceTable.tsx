@@ -77,9 +77,27 @@ export function TeamAttendanceTable({ teamMembers }: { teamMembers: TeamMember[]
         {teamMembers.map((member) => (
           <Card key={member.id} className="shadow-md">
             <CardHeader className="flex flex-row items-start justify-between gap-2">
-                <div className="min-w-0">
-                    <CardTitle className="text-base sm:text-lg truncate">{member.name}</CardTitle>
-                    <CardDescription className="text-xs sm:text-base truncate">{member.id}</CardDescription>
+                <div className="flex items-center gap-3 min-w-0">
+                    <Avatar className="h-10 w-10 cursor-pointer" onClick={() => {
+                      const img = attendanceRecords[member.id]?.stepInImage ? `${BASE_URL.replace('/api', '')}/static/${attendanceRecords[member.id].stepInImage}` : null;
+                      if (img) setPreviewImage(img);
+                    }}>
+                      <AvatarImage 
+                        src={
+                          attendanceRecords[member.id]?.stepInImage 
+                            ? `${BASE_URL.replace('/api', '')}/static/${attendanceRecords[member.id].stepInImage}` 
+                            : `https://placehold.co/40x40.png`
+                        } 
+                        alt={member.name} 
+                      />
+                      <AvatarFallback className="bg-gray-100">
+                        {member.name.charAt(0).toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                        <CardTitle className="text-base sm:text-lg truncate">{member.name}</CardTitle>
+                        <CardDescription className="text-xs sm:text-base truncate">{member.id}</CardDescription>
+                    </div>
                 </div>
                 <Badge variant={getStatusVariant(member.status)} className="w-fit text-xs sm:text-base">{member.status}</Badge>
             </CardHeader>
@@ -127,7 +145,14 @@ export function TeamAttendanceTable({ teamMembers }: { teamMembers: TeamMember[]
                     const img = attendanceRecords[member.id]?.stepInImage ? `${BASE_URL.replace('/api', '')}/static/${attendanceRecords[member.id].stepInImage}` : null;
                     if (img) setPreviewImage(img);
                   }}>
-                      <AvatarImage src={attendanceRecords[member.id]?.stepInImage ? `${BASE_URL.replace('/api', '')}/static/${attendanceRecords[member.id].stepInImage}` : `https://placehold.co/40x40.png`} data-ai-hint="person portrait" />
+                      <AvatarImage 
+                        src={
+                          attendanceRecords[member.id]?.stepInImage 
+                            ? `${BASE_URL.replace('/api', '')}/static/${attendanceRecords[member.id].stepInImage}` 
+                            : `https://placehold.co/40x40.png`
+                        } 
+                        data-ai-hint="person portrait" 
+                      />
                       <AvatarFallback>{member.name.charAt(0)}</AvatarFallback>
                   </Avatar>
                   {member.name}

@@ -1,7 +1,5 @@
 import Employee from "../models/employee.models.js";
 
-
-
 // Controller: createEmployee
 // export const createEmployee = async (req, res) => {
 //     try {
@@ -64,8 +62,6 @@ export const createEmployee = async (req, res) => {
   }
 };
 
-
-
 // export const updateEmployee = async (req, res) => {
 //   try {
 //     const updateData = { ...req.body };
@@ -110,9 +106,6 @@ export const updateEmployee = async (req, res) => {
   }
 };
 
-
-
-
 export const deleteEmployee = async (req, res) => {
   try {
     const deletedEmployee = await Employee.findByIdAndDelete(req.params.id);
@@ -125,8 +118,6 @@ export const deleteEmployee = async (req, res) => {
     res.status(500).json({ message: "Error deleting employee", error });
   }
 }
-
-
 export const getEmployees = async (req, res) => {
   try {
     const { isWorking,shift } = req.query;

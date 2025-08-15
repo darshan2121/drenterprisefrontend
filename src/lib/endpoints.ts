@@ -1,6 +1,5 @@
-// export const BASE_URL = "https://drenterprise.onrender.com/api";
-export const BASE_URL = "http://localhost:5678/api"
-
+export const BASE_URL = "http://localhost:5678/api";
+// export const BASE_URL = "http://localhost:5678/api"
 export const ENDPOINTS = {
   manager: {
     login: `${BASE_URL}/manager/login`,
@@ -23,6 +22,7 @@ export const ENDPOINTS = {
     byEmployee: (id: string) => `${BASE_URL}/attendence/${id}`,
     single: (id: string) => `${BASE_URL}/attendence/${id}`,
     all: `${BASE_URL}/attendence`,
+    bulkUpdate: `${BASE_URL}/attendence/bulk-update`,
   },
   dashboard: `${BASE_URL}/dashboard`,
   auth: {

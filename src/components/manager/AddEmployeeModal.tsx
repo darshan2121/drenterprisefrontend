@@ -21,10 +21,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, PlusCircle } from "lucide-react";
-import { useState } from "react";
+import { Loader2, PlusCircle, Camera, Upload, RefreshCcw } from "lucide-react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useDispatch } from "react-redux";
 import { addEmployeeByManager } from "@/store/slices/employeeSlice";
+import Image from "next/image";
 
 export function AddEmployeeModal() {
   const [form, setForm] = useState({
@@ -36,14 +37,46 @@ export function AddEmployeeModal() {
   });
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [photoDataUri, setPhotoDataUri] = useState<string | null>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  const [step, setStep] = useState<"idle" | "capturing" | "preview">("idle");
   const { toast } = useToast();
   const dispatch = useDispatch();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const shiftMap: Record<string, string> = {
     "7 AM - 3 PM": "morning",
     "2 PM - 10 PM": "evening",
     "10 PM - 7 AM": "night",
   };
+
+  const stopCamera = useCallback(() => {
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      setStream(null);
+    }
+  }, [stream]);
+
+  const resetState = useCallback(() => {
+    stopCamera();
+    setStep("idle");
+    setPhotoDataUri(null);
+    setForm({
+      name: '',
+      email: '',
+      shift: '',
+      address: '',
+      mobile: '',
+    });
+  }, [stopCamera]);
+
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, [stopCamera]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -53,6 +86,101 @@ export function AddEmployeeModal() {
   const handleShiftChange = (value: string) => {
     setForm(f => ({ ...f, shift: value }));
   };
+
+  const startCamera = useCallback(async () => {
+    setStep('capturing');
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode },
+        audio: false
+      });
+      setStream(mediaStream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+    } catch (err) {
+      console.error("Error accessing camera:", err);
+      toast({
+        variant: "destructive",
+        title: "Camera Error",
+        description: "Could not access your camera. Please check permissions and try again.",
+      });
+      setStep('idle');
+    }
+  }, [toast, facingMode]);
+
+  const takePhoto = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      toast({
+        variant: "destructive",
+        title: "Camera Not Ready",
+        description: "The camera is still initializing. Please wait a moment and try again.",
+      });
+      return;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUri = canvas.toDataURL("image/jpeg");
+      setPhotoDataUri(dataUri);
+    }
+    stopCamera();
+    setStep("preview");
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast({
+        variant: "destructive",
+        title: "Invalid File",
+        description: "Please select an image file.",
+      });
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setPhotoDataUri(e.target?.result as string);
+      setStep("preview");
+    };
+    reader.readAsDataURL(file);
+    event.target.value = '';
+  };
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const flipCamera = useCallback(() => {
+    setFacingMode((prev) => (prev === 'user' ? 'environment' : 'user'));
+    stopCamera();
+    setTimeout(() => {
+      startCamera();
+    }, 200);
+  }, [stopCamera, startCamera]);
+
+  // Helper to convert data URI to File
+  function dataURItoFile(dataURI: string, filename: string) {
+    const arr = dataURI.split(',');
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    if (!mimeMatch) throw new Error('Invalid data URI');
+    const mime = mimeMatch[1];
+    const bstr = atob(arr[1]);
+    const n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    for (let i = 0; i < n; i++) u8arr[i] = bstr.charCodeAt(i);
+    return new File([u8arr], filename, { type: mime });
+  }
 
   const validateForm = () => {
     const requiredFields = {
@@ -74,6 +202,15 @@ export function AddEmployeeModal() {
       return false;
     }
 
+    if (!photoDataUri) {
+      toast({
+        title: "Validation Error",
+        description: "Please add an employee photo.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
     return true;
   };
 
@@ -83,28 +220,40 @@ export function AddEmployeeModal() {
     setIsLoading(true);
     try {
       const backendShift = shiftMap[form.shift] || form.shift;
-      const payload = {
-        name: form.name,
-        email: form.email,
-        shift: backendShift,
-        address: form.address,
-        mobile: form.mobile,
-      };
+      
+      // Create FormData for image upload
+      const formData = new FormData();
+      if (photoDataUri) {
+        formData.append('image', dataURItoFile(photoDataUri, 'employee.jpg'));
+      }
+      formData.append('name', form.name);
+      formData.append('email', form.email);
+      formData.append('shift', backendShift);
+      formData.append('address', form.address);
+      formData.append('mobile', form.mobile);
 
-      await dispatch(addEmployeeByManager(payload) as any).unwrap();
+      // Use the API function that handles FormData
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5678/api'}/employee/manager`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('managerToken')}`
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to add employee');
+      }
+
+      const result = await response.json();
 
       toast({
         title: "Success!",
         description: "New employee has been added.",
       });
       setIsOpen(false);
-      setForm({
-        name: '',
-        email: '',
-        shift: '',
-        address: '',
-        mobile: '',
-      });
+      resetState();
     } catch (err: any) {
       toast({
         title: "Error",
@@ -116,8 +265,52 @@ export function AddEmployeeModal() {
     }
   };
 
+  const handleOpenChange = (open: boolean) => {
+    if (!open) {
+      resetState();
+    }
+    setIsOpen(open);
+  };
+
+  const renderImageSection = () => {
+    switch(step) {
+      case 'idle':
+        return (
+          <div className="my-4 w-full h-48 sm:h-64 rounded-lg bg-muted flex items-center justify-center overflow-hidden">
+            <div className="text-center text-muted-foreground flex flex-col items-center gap-2">
+              <Camera className="h-12 w-12" />
+              <p>Add Employee Photo</p>
+            </div>
+          </div>
+        );
+      case 'capturing':
+        return (
+          <div className="my-4 w-full h-48 sm:h-64 rounded-lg bg-muted flex items-center justify-center overflow-hidden relative">
+            <video ref={videoRef} autoPlay playsInline className="h-full w-full object-cover" />
+            <button
+              type="button"
+              onClick={flipCamera}
+              className="absolute top-3 right-3 z-10 bg-white/80 hover:bg-white rounded-full p-2 shadow-md border border-gray-200 transition-colors"
+              aria-label="Flip Camera"
+              title="Flip Camera"
+            >
+              <RefreshCcw className="h-6 w-6 text-gray-700" />
+            </button>
+          </div>
+        );
+      case 'preview':
+        return (
+          <div className="my-4 w-full h-48 sm:h-64 rounded-lg bg-muted flex items-center justify-center overflow-hidden relative">
+            {photoDataUri && (
+              <Image src={photoDataUri} alt="Employee photo preview" layout="fill" objectFit="cover" />
+            )}
+          </div>
+        );
+    }
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button>
           <PlusCircle className="mr-2 h-4 w-4" />
@@ -131,7 +324,36 @@ export function AddEmployeeModal() {
             Fill in the details for the new employee.
           </DialogDescription>
         </DialogHeader>
+        
         <div className="grid gap-4 py-4">
+          {/* Image Upload Section */}
+          <div className="space-y-2">
+            <Label>Employee Photo</Label>
+            {renderImageSection()}
+            {step === 'idle' && (
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button onClick={startCamera} variant="outline" className="flex-1">
+                  <Camera className="mr-2 h-4 w-4" /> Take Photo
+                </Button>
+                <Button onClick={handleUploadClick} variant="outline" className="flex-1">
+                  <Upload className="mr-2 h-4 w-4" /> Upload Photo
+                </Button>
+              </div>
+            )}
+            {step === 'capturing' && (
+              <Button onClick={takePhoto} className="w-full">
+                <Camera className="mr-2 h-4 w-4" /> Take Photo
+              </Button>
+            )}
+            {step === 'preview' && (
+              <div className="flex gap-2">
+                <Button onClick={() => { setStep('idle'); setPhotoDataUri(null); }} variant="outline" className="flex-1">
+                  <RefreshCcw className="mr-2 h-4 w-4" /> Retake
+                </Button>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4">
             <Label htmlFor="name" className="text-left sm:text-right">Full Name</Label>
             <Input
@@ -197,6 +419,15 @@ export function AddEmployeeModal() {
             />
           </div>
         </div>
+
+        <input 
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileSelect}
+          className="hidden"
+          accept="image/*"
+        />
+
         <DialogFooter>
           <DialogClose asChild>
             <Button type="button" variant="outline" disabled={isLoading}>Cancel</Button>

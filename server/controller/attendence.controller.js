@@ -257,15 +257,52 @@ export const getEmployeeAttendance = async (req, res) => {
 // Get all attendance records (for admin reports)
 export const getAllAttendance = async (req, res) => {
   try {
-    const attendance = await Attendance.find({})
+    const { managerId, employeeId, startDate, endDate, order = 'desc' } = req.query;
+    
+    // Build query object
+    const query = {};
+    
+    // Filter by manager
+    if (managerId) {
+      query.managerId = managerId;
+    }
+    
+    // Filter by employee
+    if (employeeId) {
+      query.employeeId = employeeId;
+    }
+    
+    // Filter by date range
+    if (startDate || endDate) {
+      query.stepIn = {};
+      if (startDate) {
+        query.stepIn.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        query.stepIn.$lte = new Date(endDate + 'T23:59:59.999Z');
+      }
+    }
+    
+    // Build sort object
+    const sort = {};
+    if (order === 'desc') {
+      sort.createdAt = -1;
+    } else {
+      sort.createdAt = 1;
+    }
+    
+    const attendance = await Attendance.find(query)
       .populate("employeeId")
       .populate("managerId")
-      .sort({ createdAt: 1 });
+      .sort(sort);
+      
     res.status(200).json({ attendance });
   } catch (error) {
     console.error("Error fetching all attendance:", error);
     res.status(500).json({ message: "Error fetching all attendance", error });
   }
 };
+
+
 
 

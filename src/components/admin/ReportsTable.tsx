@@ -293,17 +293,20 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { FileDown, RefreshCw, Loader2, Check, CheckCircle } from "lucide-react";
 import { EditReportModal } from "./EditReportModal";
-import { BulkEditModal } from "@/components/admin/EditBulkEmployeeModal";
+import { BulkUpdateModal } from "@/components/admin/BulkUpdateModal";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import { useState, useEffect } from "react";
+// import { STATIC_URL } from "@/lib/endpoints";
 
 type Report = {
   date: string;
   employee: string;
+  employeePhoto?: string;
   shift: string;
   location: string;
   status: 'Present' | 'Absent' | 'On Leave';
@@ -372,9 +375,8 @@ export function ReportsTable({
     shift?: string;
   };
 }) {
-  const isMobile = useIsMobile();
+  const { isMobile } = useIsMobile();
   const [selectedReports, setSelectedReports] = useState<string[]>([]);
-  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
   const [isAllSelected, setIsAllSelected] = useState(false);
 
   // Toggle selection for a single report
@@ -407,7 +409,6 @@ export function ReportsTable({
 
   // Handle bulk edit completion
   const handleBulkEditComplete = (success: boolean) => {
-    setIsBulkEditOpen(false);
     if (success) {
       setSelectedReports([]);
       setIsAllSelected(false);
@@ -499,15 +500,30 @@ export function ReportsTable({
   const EnhancedHeaderActions = () => (
     <div className="flex items-center gap-2">
       {isBulkEditAvailable && selectedReports.length > 0 && (
-        <Button 
-          variant="default" 
-          size="sm" 
-          onClick={() => setIsBulkEditOpen(true)}
-          disabled={loading}
-        >
-          <CheckCircle className="mr-2 h-4 w-4" />
-          Bulk Edit ({selectedReports.length})
-        </Button>
+        <BulkUpdateModal
+          selectedIds={selectedReports}
+          onSuccess={() => handleBulkEditComplete(true)}
+          currentFilters={filters || {}}
+          selectedRecords={selectedReports.map(id => {
+            const report = reports.find(r => r._id === id || r.id === id);
+            return {
+              _id: id,
+              date: report?.date || '',
+              stepIn: report?.clockIn || '',
+              stepOut: report?.clockOut || ''
+            };
+          })}
+          trigger={
+            <Button 
+              variant="default" 
+              size="sm" 
+              disabled={loading}
+            >
+              <CheckCircle className="mr-2 h-4 w-4" />
+              Bulk Edit ({selectedReports.length})
+            </Button>
+          }
+        />
       )}
       <HeaderActions 
         onDownloadPdf={handleDownloadPdf} 
@@ -565,7 +581,20 @@ export function ReportsTable({
       <TableCell className="font-medium text-muted-foreground truncate max-w-[100px]">
         {report.date}
       </TableCell>
-      <TableCell className="truncate max-w-[120px]">{report.employee}</TableCell>
+      <TableCell className="truncate max-w-[120px]">
+        <div className="flex items-center gap-2">
+          <Avatar className="h-6 w-6">
+            <AvatarImage 
+              src={report.employeePhoto ? `${STATIC_URL}${report.employeePhoto}` : undefined} 
+              alt={report.employee} 
+            />
+            <AvatarFallback className="text-xs bg-gray-100">
+              {report.employee.charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <span className="truncate">{report.employee}</span>
+        </div>
+      </TableCell>
       <TableCell className="hidden md:table-cell text-muted-foreground truncate max-w-[120px]">
         {getShiftLabel(report.shift)}
       </TableCell>
@@ -609,9 +638,20 @@ export function ReportsTable({
         </div>
       )}
       <CardHeader className="flex flex-row items-start justify-between gap-2">
-        <div className="min-w-0">
-          <CardTitle className="text-base sm:text-lg font-bold truncate">{report.employee}</CardTitle>
-          <CardDescription className="text-xs sm:text-base truncate">{report.date}</CardDescription>
+        <div className="flex items-center gap-3 min-w-0">
+          <Avatar className="h-10 w-10">
+            <AvatarImage 
+              src={report.employeePhoto ? `${STATIC_URL}${report.employeePhoto}` : undefined} 
+              alt={report.employee} 
+            />
+            <AvatarFallback className="bg-gray-100">
+              {report.employee.charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            <CardTitle className="text-base sm:text-lg font-bold truncate">{report.employee}</CardTitle>
+            <CardDescription className="text-xs sm:text-base truncate">{report.date}</CardDescription>
+          </div>
         </div>
         <Badge variant={getStatusVariant(report.status)} className="text-xs sm:text-base">{report.status}</Badge>
       </CardHeader>
@@ -651,14 +691,7 @@ export function ReportsTable({
           {reports.map(renderMobileCard)}
         </div>
 
-        {/* Bulk Edit Modal for mobile */}
-        <BulkEditModal
-          isOpen={isBulkEditOpen}
-          onClose={() => setIsBulkEditOpen(false)}
-          attendanceIds={selectedReports}
-          onComplete={handleBulkEditComplete}
-          shift={filters?.shift}
-        />
+
       </div>
     );
   }
@@ -688,14 +721,7 @@ export function ReportsTable({
         </div>
       </CardContent>
 
-      {/* Bulk Edit Modal */}
-      <BulkEditModal
-        isOpen={isBulkEditOpen}
-        onClose={() => setIsBulkEditOpen(false)}
-        attendanceIds={selectedReports}
-        onComplete={handleBulkEditComplete}
-        shift={filters?.shift}
-      />
+
     </>
   );
 }

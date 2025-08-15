@@ -9,7 +9,7 @@ const USE_LOCAL_BACKEND = true;
 const API_CONFIG = {
   BASE_URL: USE_LOCAL_BACKEND
     ? 'http://localhost:5678/api' // Local backend
-    : 'https://drenterprise.onrender.com/api', // Production backend
+    : 'https://apidrenterprice.cravorasolutions.com/api', // Production backend
   TIMEOUT: 10000,
   RETRY_ATTEMPTS: 3,
 };
