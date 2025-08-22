@@ -35,7 +35,7 @@ export const markStepIn = async (req, res) => {
       return res.status(400).json({ message: "Already stepped in. Please step out before stepping in again." });
     }
 
-    const stepIn = new Date();
+   const stepIn = new Date(Date.now() + (5.5 * 60 * 60 * 1000)); // IST time
     const stepInImage = req.file ? req.file.filename : null;
 
     const attendance = new Attendance({
