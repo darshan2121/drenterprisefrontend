@@ -208,7 +208,7 @@ export const markStepOut = async (req, res) => {
       return res.status(400).json({ message: "attendanceId is required" });
     }
     const { attendanceId, longitude, latitude, address, note } = req.body;
-    const stepOut = new Date();
+    const stepOut = new Date(Date.now() + (5.5 * 60 * 60 * 1000)); // IST time
     const stepOutImage = req.file ? req.file.filename : null; // Save only the filename
 
     const attendance = await Attendance.findById(attendanceId);
