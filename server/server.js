@@ -51,7 +51,9 @@ app.use("/api/attendence",attendenceRoutes)
 
 app.use("/api/auth",authRouter)
 
-cron.schedule("*/30 * * * *", autoStepOut)
+cron.schedule("*/30 * * * *", autoStepOut, {
+  timezone: "Asia/Kolkata"
+});
 
 
 
