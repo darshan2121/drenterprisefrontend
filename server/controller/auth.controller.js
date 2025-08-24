@@ -28,15 +28,38 @@ export const forgotPassword = async (req, res) => {
     if (!user) return res.status(404).json({ message: `${userType} not found` });
 
 
-    const transporter = nodemailer.createTransport({
-  host: "smtp.hostinger.com",
-  port: 465, // or 587 (for TLS)
-  secure: true, // true for port 465, false for port 587
+//     const transporter = nodemailer.createTransport({
+//   host: "smtp.hostinger.com",
+//   port: 465, // or 587 (for TLS)
+//   secure: true, // true for port 465, false for port 587
+//   auth: {
+//     user: process.env.EMAIL_USER  ,
+//     pass: process.env.EMAIL_PASS, // or App Password if set
+//   },
+// });
+
+const transporter = nodemailer.createTransport({
+  service: "gmail",
   auth: {
-    user: process.env.EMAIL_USER  ,
-    pass: process.env.EMAIL_PASS, // or App Password if set
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
   },
+  logger: true,
+  debug: true,
 });
+
+// const transporter = nodemailer.createTransport({
+//   host: "smtp.hostinger.com",
+//   port: 465,
+//   secure: true,
+//   auth: {
+//     user: process.env.EMAIL_USER,
+//     pass: process.env.EMAIL_PASS,
+//   },
+//   logger: true,  // logs SMTP commands
+//   debug: true    // include SMTP traffic in logs
+// });
+
 
 
     const mailOptions = {
@@ -86,6 +109,8 @@ export const forgotPassword = async (req, res) => {
 
 
 
+console.log("EMAIL_USER:", process.env.EMAIL_USER);
+console.log("EMAIL_PASS:", process.env.EMAIL_PASS);
 
 
 export const verifyOtpAndResetPassword = async (req, res) => {
