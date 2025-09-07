@@ -21,6 +21,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useDispatch, useSelector } from 'react-redux';
 import { clockIn, clockOut, fetchAttendanceId } from '@/store/slices/attendanceSlice';
 import { Tooltip } from "@/components/ui/tooltip";
+import { useDebouncedCallback } from "@/hooks/useDebounce";
 
 export function ClockInModal({ employee, attendanceId: propAttendanceId, status, onAttendanceChange }: {
   employee: { name: string; id: string };
@@ -29,7 +30,7 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
   onAttendanceChange?: (newId: string | null) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [step, setStep] = useState<"idle" | "capturing" | "preview" | "verifying" | "result" | "clockedIn">("idle");
+  const [step, setStep] = useState<"idle" | "capturing" | "preview" | "verifying" | "result" | "clockedIn" | "processing">("idle");
   const [photoDataUri, setPhotoDataUri] = useState<string | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [verificationResult, setVerificationResult] = useState<VerifyClockInOutput | null>(null);
@@ -40,6 +41,17 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user'); // Add this state
   const [shift, setShift] = useState('morning');
+  const [imageLoading, setImageLoading] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+
+  // Debounced handlers for input fields
+  const debouncedSetLocation = useDebouncedCallback((value: string) => {
+    setManualLocation(value);
+  }, 300);
+
+  const debouncedSetNote = useDebouncedCallback((value: string) => {
+    setNote(value);
+  }, 300);
   const attendanceIdFromRedux = useSelector((state: any) => state.attendance.attendanceIds[employee.id] || null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -50,7 +62,7 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
   const { isClockingIn, isClockingOut, error: attendanceError } = useSelector((state: any) => state.attendance);
 
   // Debug log for attendanceId
-  console.log("[DEBUG] ClockInModal for", employee.name, "employeeId:", employee.id, "attendanceId from Redux:", attendanceIdFromRedux);
+  // console.log("[DEBUG] ClockInModal for", employee.name, "employeeId:", employee.id, "attendanceId from Redux:", attendanceIdFromRedux);
 
   // Add a loading state for attendanceId
   const isAttendanceIdLoading = attendanceIdFromRedux === undefined;
@@ -62,7 +74,7 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
     }
   }, [stream]);
 
-  const resetState = useCallback(() => {
+    const resetState = useCallback(() => {
     stopCamera();
     setStep("idle");
     setPhotoDataUri(null);
@@ -71,6 +83,8 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
     setNote('');
     setLatitude('');
     setLongitude('');
+    setImageLoading(false);
+    setCameraReady(false);
   }, [stopCamera]);
 
   useEffect(() => {
@@ -83,8 +97,8 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
   useEffect(() => {
     if (isOpen) {
       console.log("[DEBUG] Modal opened for", employee.name, "employeeId:", employee.id);
-      // Get geolocation
-      if (navigator.geolocation) {
+      // Get geolocation - check if we're on client side and geolocation is available
+      if (typeof window !== 'undefined' && navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (position) => {
             setLatitude(position.coords.latitude.toString());
@@ -131,14 +145,36 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
 
   const startCamera = useCallback(async () => {
     setStep('capturing');
+    setCameraReady(false);
     try {
+      // Check if we're on client side and mediaDevices is available
+      if (typeof window === 'undefined') {
+        throw new Error("Not running in browser environment");
+      }
+      
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("MediaDevices API not supported");
+      }
+
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode }, // Use facingMode
+        video: { 
+          facingMode,
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }, // Use facingMode with ideal dimensions
         audio: false
       });
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+        // Wait for video to be ready
+        videoRef.current.onloadedmetadata = () => {
+          console.log("Video loaded with dimensions:", videoRef.current?.videoWidth, "x", videoRef.current?.videoHeight);
+        };
+        videoRef.current.oncanplay = () => {
+          console.log("Video can play - camera is ready");
+          setCameraReady(true);
+        };
       }
     } catch (err) {
       console.error("Error accessing camera:", err);
@@ -153,7 +189,24 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
   
   const takePhoto = () => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video) {
+      console.error("Video element not found");
+      return;
+    }
+
+    console.log("Taking photo - Video dimensions:", video.videoWidth, "x", video.videoHeight);
+    console.log("Video ready state:", video.readyState);
+    console.log("Video paused:", video.paused);
+    console.log("Camera ready state:", cameraReady);
+
+    if (!cameraReady) {
+      toast({
+        variant: "destructive",
+        title: "Camera Not Ready",
+        description: "Please wait for the camera to fully initialize before taking a photo.",
+      });
+      return;
+    }
 
     if (video.videoWidth === 0 || video.videoHeight === 0) {
       toast({
@@ -164,17 +217,98 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
       return;
     }
 
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUri = canvas.toDataURL("image/jpeg");
-      setPhotoDataUri(dataUri);
-    }
-    stopCamera();
-    setStep("preview");
+    // Show loading state
+    setStep("processing");
+    
+    // Use a more reliable approach with multiple attempts
+    const attemptCapture = (attempts = 0) => {
+      if (attempts >= 3) {
+        console.error("Failed to capture photo after 3 attempts");
+        toast({
+          variant: "destructive",
+          title: "Photo Error",
+          description: "Failed to capture photo. Please try again.",
+        });
+        setStep("capturing");
+        return;
+      }
+
+      try {
+        const canvas = document.createElement("canvas");
+        
+        // Use actual video dimensions
+        const width = video.videoWidth;
+        const height = video.videoHeight;
+        
+        console.log(`Capture attempt ${attempts + 1} - Canvas dimensions:`, width, "x", height);
+        
+        if (width === 0 || height === 0) {
+          console.log("Video dimensions still 0, retrying...");
+          setTimeout(() => attemptCapture(attempts + 1), 100);
+          return;
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          console.error("Could not get canvas context");
+          toast({
+            variant: "destructive",
+            title: "Photo Error",
+            description: "Could not process the photo. Please try again.",
+          });
+          setStep("capturing");
+          return;
+        }
+
+        // Clear canvas first
+        ctx.clearRect(0, 0, width, height);
+        
+        // Draw the video frame to canvas
+        ctx.drawImage(video, 0, 0, width, height);
+        
+        // Try to get the data URI
+        let dataUri;
+        try {
+          dataUri = canvas.toDataURL("image/jpeg", 0.9);
+          console.log("Photo captured successfully, data URI length:", dataUri.length);
+          console.log("Data URI starts with:", dataUri.substring(0, 50));
+        } catch (dataUriError) {
+          console.error("Error creating data URI:", dataUriError);
+          // Fallback to PNG if JPEG fails
+          dataUri = canvas.toDataURL("image/png");
+          console.log("Fallback to PNG, data URI length:", dataUri.length);
+        }
+        
+        if (dataUri && dataUri.length > 0) {
+          setPhotoDataUri(dataUri);
+          setImageLoading(true);
+          stopCamera();
+          setStep("preview");
+        } else {
+          throw new Error("Failed to generate data URI");
+        }
+        
+      } catch (error) {
+        console.error(`Error taking photo (attempt ${attempts + 1}):`, error);
+        if (attempts < 2) {
+          console.log("Retrying capture...");
+          setTimeout(() => attemptCapture(attempts + 1), 100);
+        } else {
+          toast({
+            variant: "destructive",
+            title: "Photo Error",
+            description: "An error occurred while taking the photo. Please try again.",
+          });
+          setStep("capturing");
+        }
+      }
+    };
+
+        // Start the capture process
+    attemptCapture();
   };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -190,10 +324,42 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
         return;
       }
       
+      // Show processing state
+      setStep("processing");
+      
       const reader = new FileReader();
       reader.onload = (e) => {
-          setPhotoDataUri(e.target?.result as string);
-          setStep("preview");
+          const dataUri = e.target?.result as string;
+          
+          // Compress uploaded image if it's too large
+          const img = new window.Image();
+          img.onload = () => {
+            const canvas = document.createElement("canvas");
+            const maxSize = 800;
+            let { width, height } = img;
+            
+            if (width > maxSize || height > maxSize) {
+              const ratio = Math.min(maxSize / width, maxSize / height);
+              width = Math.floor(width * ratio);
+              height = Math.floor(height * ratio);
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+              ctx.imageSmoothingEnabled = true;
+              ctx.imageSmoothingQuality = 'high';
+              ctx.drawImage(img, 0, 0, width, height);
+              const compressedDataUri = canvas.toDataURL("image/jpeg", 0.8);
+              setPhotoDataUri(compressedDataUri);
+            } else {
+              setPhotoDataUri(dataUri);
+            }
+            setStep("preview");
+          };
+          img.src = dataUri;
       };
       reader.readAsDataURL(file);
       // Reset file input value to allow selecting the same file again
@@ -204,7 +370,7 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
     fileInputRef.current?.click();
   };
   
-  // Helper to convert data URI to File
+  // Helper to convert data URI to File with optimization
   function dataURItoFile(dataURI: string, filename: string) {
     const arr = dataURI.split(',');
     const mimeMatch = arr[0].match(/:(.*?);/);
@@ -213,12 +379,29 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
     const bstr = atob(arr[1]);
     const n = bstr.length;
     const u8arr = new Uint8Array(n);
-    for (let i = 0; i < n; i++) u8arr[i] = bstr.charCodeAt(i);
+    
+    // Use a more efficient loop for large images
+    const chunkSize = 8192; // Process in 8KB chunks
+    for (let i = 0; i < n; i += chunkSize) {
+      const end = Math.min(i + chunkSize, n);
+      for (let j = i; j < end; j++) {
+        u8arr[j] = bstr.charCodeAt(j);
+      }
+    }
+    
     return new File([u8arr], filename, { type: mime });
   }
 
   const handleClockIn = async () => {
-    if (!photoDataUri) return;
+    if (!photoDataUri) {
+      toast({
+        variant: "destructive",
+        title: "Photo Required",
+        description: "Please take a photo before clocking in.",
+      });
+      return;
+    }
+    
     const clockInLocation = manualLocation.trim();
     if (!clockInLocation) {
       toast({
@@ -228,11 +411,22 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
       });
       return;
     }
+    
     if (!latitude || !longitude) {
       toast({
         variant: "destructive",
         title: "Location Error",
-        description: "Could not get your current location.",
+        description: "Could not get your current location. Please check your GPS settings.",
+      });
+      return;
+    }
+    
+    // Check if employee ID is available
+    if (!employee.id) {
+      toast({
+        variant: "destructive",
+        title: "Employee Error",
+        description: "Employee information is missing. Please contact your administrator.",
       });
       return;
     }
@@ -262,10 +456,14 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
         }
         setStep('result');
       } else {
+        // Get the specific error from the rejected action
+        const errorMessage = resultAction.error?.message || attendanceError || 'Failed to clock in.';
+        console.error('[ClockInModal] Clock in failed:', resultAction.error);
+        
         toast({
           variant: 'destructive',
           title: 'Clock In Failed',
-          description: attendanceError || 'Failed to clock in.',
+          description: `Error: ${errorMessage}. Please check your internet connection and try again.`,
         });
       }
     } finally {
@@ -299,12 +497,17 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
           description: 'Clock out successful.',
         });
         if (typeof window !== 'undefined') localStorage.removeItem(`attendanceId_${employee.id}`);
+        if (onAttendanceChange) onAttendanceChange(null);
         setIsOpen(false);
       } else {
+        // Get the specific error from the rejected action
+        const errorMessage = resultAction.error?.message || attendanceError || 'Failed to clock out.';
+        console.error('[ClockInModal] Clock out failed:', resultAction.error);
+        
         toast({
           variant: 'destructive',
           title: 'Clock Out Failed',
-          description: attendanceError || 'Failed to clock out.',
+          description: `Error: ${errorMessage}. Please check your internet connection and try again.`,
         });
       }
     } finally {
@@ -374,7 +577,28 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
         case 'capturing':
             return (
                 <div className="my-4 w-full h-64 sm:aspect-square rounded-lg bg-muted flex items-center justify-center overflow-hidden relative">
-                    <video ref={videoRef} autoPlay playsInline className="h-full w-full object-cover" />
+                    <video 
+                        ref={videoRef} 
+                        autoPlay 
+                        playsInline 
+                        className="h-full w-full object-cover rounded-lg"
+                        style={{ maxWidth: '100%', maxHeight: '100%' }}
+                        onLoadedMetadata={() => {
+                            console.log("Video metadata loaded - dimensions:", videoRef.current?.videoWidth, "x", videoRef.current?.videoHeight);
+                        }}
+                        onCanPlay={() => {
+                            console.log("Video can play - ready to capture");
+                        }}
+                    />
+                    {/* Camera Ready Indicator */}
+                    {!cameraReady && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+                            <div className="flex flex-col items-center gap-2 text-white">
+                                <Loader2 className="h-8 w-8 animate-spin" />
+                                <p className="text-sm">Initializing camera...</p>
+                            </div>
+                        </div>
+                    )}
                     {/* Flip Camera Button Overlay */}
                     <button
                       type="button"
@@ -387,12 +611,54 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
                     </button>
                 </div>
             );
+        case 'processing':
+            return (
+                <div className="my-4 w-full h-64 sm:aspect-square rounded-lg bg-muted flex items-center justify-center overflow-hidden">
+                    <div className="flex flex-col items-center gap-4 text-muted-foreground">
+                        <Loader2 className="h-12 w-12 animate-spin" />
+                        <p>Processing image...</p>
+                    </div>
+                </div>
+            );
         case 'preview':
             return (
                 <>
                     <div className="my-4 w-full h-64 sm:aspect-square rounded-lg bg-muted flex items-center justify-center overflow-hidden relative">
-                         {photoDataUri && (
-                            <Image src={photoDataUri} alt="Selfie preview" layout="fill" objectFit="cover" />
+                         {photoDataUri ? (
+                            <>
+                                {imageLoading && (
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/20 z-10">
+                                        <Loader2 className="h-8 w-8 animate-spin text-white" />
+                                    </div>
+                                )}
+                                <img 
+                                    src={photoDataUri} 
+                                    alt="Selfie preview" 
+                                    className="w-full h-full object-cover rounded-lg"
+                                    style={{ maxWidth: '100%', maxHeight: '100%' }}
+                                    onLoad={() => {
+                                        console.log("Image loaded successfully");
+                                        setImageLoading(false);
+                                    }}
+                                    onError={(e) => {
+                                        console.error("Image failed to load:", e);
+                                        console.error("PhotoDataUri length:", photoDataUri.length);
+                                        console.error("PhotoDataUri starts with:", photoDataUri.substring(0, 100));
+                                        setImageLoading(false);
+                                        toast({
+                                            variant: "destructive",
+                                            title: "Image Error",
+                                            description: "Failed to load the captured image. Please try again.",
+                                        });
+                                    }}
+                                />
+                            </>
+                         ) : (
+                            <div className="flex flex-col items-center gap-4 text-muted-foreground">
+                                <Camera className="h-12 w-12" />
+                                <p>No image captured</p>
+                                <p className="text-xs">PhotoDataUri: {photoDataUri ? 'Present' : 'Not set'}</p>
+                            </div>
                          )}
                     </div>
                     <div className="space-y-4">
@@ -401,8 +667,8 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
                                 <Label htmlFor="manual-location">Location Name</Label>
                                 <Input 
                                     id="manual-location"
-                                    value={manualLocation}
-                                    onChange={(e) => setManualLocation(e.target.value)}
+                                    defaultValue={manualLocation}
+                                    onChange={(e) => debouncedSetLocation(e.target.value)}
                                     placeholder="e.g., Main Office, Client Site"
                                 />
                                 <Label htmlFor="shift">Shift</Label>
@@ -419,8 +685,8 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
                                 <Label htmlFor="note">Note</Label>
                                 <Input
                                     id="note"
-                                    value={note}
-                                    onChange={e => setNote(e.target.value)}
+                                    defaultValue={note}
+                                    onChange={e => debouncedSetNote(e.target.value)}
                                     placeholder="e.g., clean all area"
                                 />
                                 <div className="flex gap-2 text-xs text-muted-foreground">
@@ -496,17 +762,55 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
                     <Button onClick={handleUploadClick} variant="secondary" className="w-full"><Upload className="mr-2 h-4 w-4" /> Upload Photo</Button>
                 </div>
             )}
-            {step === 'capturing' && <Button onClick={takePhoto} className="w-full"><Camera className="mr-2 h-4 w-4" />Take Photo</Button>}
+            {step === 'capturing' && (
+                <Button 
+                    onClick={takePhoto} 
+                    className="w-full" 
+                    disabled={!cameraReady}
+                >
+                    {!cameraReady ? (
+                        <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Initializing...
+                        </>
+                    ) : (
+                        <>
+                            <Camera className="mr-2 h-4 w-4" />
+                            Take Photo
+                        </>
+                    )}
+                </Button>
+            )}
             {step === 'preview' && (
                 <div className="w-full flex flex-col gap-2">
                     <Button onClick={() => { setStep('idle'); resetState(); }} variant="outline" className="w-full"><RefreshCcw className="mr-2 h-4 w-4" />Start Over</Button>
                     {!attendanceIdFromRedux ? (
                       <Button onClick={handleClockIn} className="w-full" disabled={isClockInDisabled() || isSubmitting}>
-                        {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserCheck className="mr-2 h-4 w-4" />}Confirm & Clock In
+                        {isSubmitting ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <UserCheck className="mr-2 h-4 w-4" />
+                            Confirm & Clock In
+                          </>
+                        )}
                       </Button>
                     ) : (
                       <Button onClick={handleClockOut} className="w-full" disabled={isClockInDisabled() || isSubmitting}>
-                        {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserCheck className="mr-2 h-4 w-4" />}Confirm & Clock Out
+                        {isSubmitting ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <UserCheck className="mr-2 h-4 w-4" />
+                            Confirm & Clock Out
+                          </>
+                        )}
                       </Button>
                     )}
                 </div>

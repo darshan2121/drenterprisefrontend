@@ -26,6 +26,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useDispatch } from "react-redux";
 import { addEmployeeByManager } from "@/store/slices/employeeSlice";
 import Image from "next/image";
+import { getApiUrl } from "@/lib/config";
 
 export function AddEmployeeModal() {
   const [form, setForm] = useState({
@@ -211,6 +212,26 @@ export function AddEmployeeModal() {
       return false;
     }
 
+    // Validate email format if provided
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid email address.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    // Validate mobile number if provided
+    if (form.mobile && !/^\d{10}$/.test(form.mobile.replace(/\D/g, ''))) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a valid 10-digit mobile number.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
     return true;
   };
 
@@ -221,40 +242,185 @@ export function AddEmployeeModal() {
     try {
       const backendShift = shiftMap[form.shift] || form.shift;
       
+      // Get manager ID and token from localStorage
+      const managerId = localStorage.getItem('managerId');
+      const managerToken = localStorage.getItem('managerToken');
+      
+      if (!managerId) {
+        throw new Error('Manager ID not found. Please log in again.');
+      }
+      
+      if (!managerToken) {
+        throw new Error('Manager token not found. Please log in again.');
+      }
+      
+      // Validate manager ID format
+      if (!managerId || typeof managerId !== 'string' || managerId.trim() === "") {
+        toast({
+          title: "Error",
+          description: "Manager ID is missing or invalid. Please log in again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
       // Create FormData for image upload
       const formData = new FormData();
       if (photoDataUri) {
-        formData.append('image', dataURItoFile(photoDataUri, 'employee.jpg'));
+        const timestamp = Date.now();
+        const filename = `employee_${timestamp}.jpg`;
+        const imageFile = dataURItoFile(photoDataUri, filename);
+        console.log('Image file being uploaded:', imageFile);
+        formData.append('image', imageFile);
       }
-      formData.append('name', form.name);
-      formData.append('email', form.email);
+      // Add all required fields
+      formData.append('name', form.name.trim());
+      formData.append('email', form.email.trim());
       formData.append('shift', backendShift);
-      formData.append('address', form.address);
-      formData.append('mobile', form.mobile);
+      formData.append('address', form.address.trim());
+      formData.append('mobile', form.mobile.trim());
+      formData.append('managerId', managerId);
+      formData.append('createdBy', managerId); // Manager ID as createdBy
+      formData.append('isCreatedByAdmin', 'false'); // Manager creates employee
+      
+      // Add optional fields with defaults if empty
+      if (!form.email.trim()) {
+        formData.append('email', '');
+      }
+      if (!form.mobile.trim()) {
+        formData.append('mobile', '');
+      }
+
+      console.log('=== FORM DATA DEBUG ===');
+      console.log('Manager ID:', managerId);
+      console.log('Manager Token:', managerToken ? 'Present' : 'Missing');
+      console.log('API URL:', `${getApiUrl()}/employee`);
+      console.log('FormData contents:');
+      for (let [key, value] of formData.entries()) {
+        if (value instanceof File) {
+          console.log(key, 'File:', value.name, 'Size:', value.size, 'Type:', value.type);
+        } else {
+          console.log(key, value);
+        }
+      }
+      
+      // Additional validation checks
+      console.log('=== VALIDATION CHECKS ===');
+      console.log('Name length:', form.name.trim().length);
+      console.log('Email format valid:', /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()));
+      console.log('Mobile format valid:', /^\d{10}$/.test(form.mobile.trim()));
+      console.log('Address length:', form.address.trim().length);
+      console.log('Shift value:', backendShift);
+      console.log('Photo data present:', !!photoDataUri);
+      console.log('=== END VALIDATION CHECKS ===');
+      
+      console.log('=== END FORM DATA DEBUG ===');
 
       // Use the API function that handles FormData
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5678/api'}/employee/manager`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('managerToken')}`
-        },
-        body: formData
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+      
+      try {
+        console.log('=== REQUEST DEBUG ===');
+        console.log('Request URL:', `${getApiUrl()}/employee`);
+        console.log('Request method: POST');
+        console.log('Authorization header present:', !!managerToken);
+        console.log('FormData entries count:', Array.from(formData.entries()).length);
+        console.log('=== END REQUEST DEBUG ===');
+        
+        const response = await fetch(`${getApiUrl()}/employee`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${managerToken}`
+            // Don't set Content-Type for FormData - browser will set it automatically
+          },
+          body: formData,
+          signal: controller.signal
+        });
+        
+                clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to add employee');
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+
+        if (!response.ok) {
+          let errorMessage = `Failed to add employee. Status: ${response.status}`;
+          
+          try {
+            const errorData = await response.json();
+            console.error('Server error response:', errorData);
+            console.error('Error object details:', JSON.stringify(errorData.error, null, 2));
+            
+            if (errorData && errorData.message) {
+              errorMessage = errorData.message;
+            } else if (errorData && errorData.error) {
+              // Try to extract more specific error information
+              if (typeof errorData.error === 'object' && errorData.error !== null) {
+                const errorObj = errorData.error;
+                if (errorObj.message) {
+                  errorMessage = errorObj.message;
+                } else if (errorObj.details) {
+                  errorMessage = errorObj.details;
+                } else if (errorObj.reason) {
+                  errorMessage = errorObj.reason;
+                } else {
+                  errorMessage = JSON.stringify(errorObj);
+                }
+              } else if (typeof errorData.error === 'string') {
+                errorMessage = errorData.error;
+              } else {
+                errorMessage = 'Unknown server error';
+              }
+            } else if (typeof errorData === 'string') {
+              errorMessage = errorData;
+            } else {
+              // Try to get error text from response
+              const errorText = await response.text();
+              console.error('Response text:', errorText);
+              if (errorText && errorText.trim()) {
+                errorMessage = errorText;
+              }
+            }
+          } catch (parseError) {
+            console.error('Error parsing response:', parseError);
+            // Try to get error text if JSON parsing fails
+            try {
+              const errorText = await response.text();
+              console.error('Response text:', errorText);
+              if (errorText && errorText.trim()) {
+                errorMessage = errorText;
+              }
+            } catch (textError) {
+              console.error('Error reading response text:', textError);
+            }
+          }
+          
+          throw new Error(errorMessage);
+        }
+
+        const result = await response.json();
+        console.log('API Response:', result);
+
+        toast({
+          title: "Success!",
+          description: "New employee has been added.",
+        });
+        setIsOpen(false);
+        resetState();
+        
+        // Refresh the employee list
+        window.location.reload();
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Request timed out. Please try again.');
+        }
+        
+        throw fetchError;
       }
-
-      const result = await response.json();
-
-      toast({
-        title: "Success!",
-        description: "New employee has been added.",
-      });
-      setIsOpen(false);
-      resetState();
     } catch (err: any) {
+      console.error('Error adding employee:', err);
       toast({
         title: "Error",
         description: err.message || "Failed to add employee. Please check console for details.",
@@ -298,14 +464,19 @@ export function AddEmployeeModal() {
             </button>
           </div>
         );
-      case 'preview':
-        return (
-          <div className="my-4 w-full h-48 sm:h-64 rounded-lg bg-muted flex items-center justify-center overflow-hidden relative">
-            {photoDataUri && (
-              <Image src={photoDataUri} alt="Employee photo preview" layout="fill" objectFit="cover" />
-            )}
-          </div>
-        );
+              case 'preview':
+          return (
+            <div className="my-4 w-full h-48 sm:h-64 rounded-lg bg-muted flex items-center justify-center overflow-hidden relative">
+              {photoDataUri && (
+                <Image 
+                  src={photoDataUri} 
+                  alt="Employee photo preview" 
+                  fill
+                  className="object-cover"
+                />
+              )}
+            </div>
+          );
     }
   };
 

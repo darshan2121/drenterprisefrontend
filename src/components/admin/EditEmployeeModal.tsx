@@ -27,11 +27,12 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useDispatch } from "react-redux";
 import { editEmployee } from "@/store/slices/employeeSlice";
 import Image from "next/image";
+import { getApiUrl } from "@/lib/config";
 
 type Employee = { id: string; name: string; email: string; managerId: string; shift: string; isWorking: boolean; };
 type Manager = { _id: string; name: string; };
 
-export function EditEmployeeModal({ employee, managers = [], ...props }: { employee: Employee; managers: Manager[] }) {
+export function EditEmployeeModal({ employee, managers = [], onRefresh, ...props }: { employee: Employee; managers: Manager[]; onRefresh?: () => void }) {
   if (!employee) return null;
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -217,7 +218,7 @@ export function EditEmployeeModal({ employee, managers = [], ...props }: { emplo
       formData.append('isWorking', String(isWorking));
 
       // Use the API function that handles FormData
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5678/api'}/employee/${employee.id}`, {
+      const response = await fetch(`${getApiUrl()}/employee/${employee.id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
@@ -231,6 +232,24 @@ export function EditEmployeeModal({ employee, managers = [], ...props }: { emplo
       }
 
       const result = await response.json();
+
+      // Dispatch Redux action to update the employee in the store
+      await dispatch(editEmployee({
+        id: employee.id,
+        body: {
+          name,
+          email,
+          managerId: String(managerId),
+          shift: backendShift,
+          isWorking,
+          ...(result.employee?.image && { image: result.employee.image })
+        }
+      }) as any);
+
+      // Call refresh callback if provided
+      if (onRefresh) {
+        onRefresh();
+      }
 
       toast({
         title: "Success!",
@@ -281,14 +300,19 @@ export function EditEmployeeModal({ employee, managers = [], ...props }: { emplo
             </button>
           </div>
         );
-      case 'preview':
-        return (
-          <div className="my-4 w-full h-48 sm:h-64 rounded-lg bg-muted flex items-center justify-center overflow-hidden relative">
-            {photoDataUri && (
-              <Image src={photoDataUri} alt="Employee photo preview" layout="fill" objectFit="cover" />
-            )}
-          </div>
-        );
+              case 'preview':
+          return (
+            <div className="my-4 w-full h-48 sm:h-64 rounded-lg bg-muted flex items-center justify-center overflow-hidden relative">
+              {photoDataUri && (
+                <Image 
+                  src={photoDataUri} 
+                  alt="Employee photo preview" 
+                  fill
+                  className="object-cover"
+                />
+              )}
+            </div>
+          );
     }
   };
 

@@ -1,5 +1,6 @@
 "use client";
 
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Table,
   TableBody,
@@ -36,8 +37,8 @@ import { useDispatch } from "react-redux";
 import { removeEmployee } from "@/store/slices/employeeSlice";
 import { useToast } from "@/hooks/use-toast";
 import { authService } from "@/services/authService";
-import { useState } from "react";
 import Image from "next/image";
+import { getApiUrl, API_CONFIG } from "@/lib/config";
 
 type Employee = { 
   id: string; 
@@ -49,15 +50,37 @@ type Employee = {
   managerId: string; 
   isWorking: boolean;
   image?: string;
+  _raw?: {
+    _id: string;
+    email: string;
+    name: string;
+    mobile: string;
+    address: string;
+    managerId: {
+      _id: string;
+      name: string;
+      email: string;
+    };
+    shift: string;
+    isWorking: boolean;
+    image: string;
+    isCreatedByAdmin: boolean;
+    createdAt: string;
+    updatedAt: string;
+  };
 };
 type Manager = { _id: string; name: string; };
 
-export function EmployeesList({ employees, managers }: { employees: Employee[], managers: Manager[] }) {
-  const { isMobile } = useIsMobile();
+export function EmployeesList({ employees, managers, onRefresh }: { employees: Employee[], managers: Manager[]; onRefresh?: () => void }) {
+  const isMobile = useIsMobile();
   const dispatch = useDispatch();
   const { toast } = useToast();
   const isReadonly = authService.getCurrentUser()?.role === "readonly";
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = isMobile ? 8 : 12; // Fewer items on mobile for better performance
 
   const getStatusVariant = (status: Employee['status']) => {
     switch(status) {
@@ -70,9 +93,64 @@ export function EmployeesList({ employees, managers }: { employees: Employee[], 
 
   const getManagerName = (managerId: string) => managers.find((m: any) => m._id === managerId)?.name || "-";
 
-  const getImageUrl = (image: string | undefined) => {
-    if (!image) return null;
-    return `http://localhost:5678/static/${image}`;
+  const getImageUrl = (employee: Employee) => {
+    // Check for image in _raw object first (actual API response structure)
+    const image = employee._raw?.image || employee.image;
+    
+    if (!image) {
+      return null;
+    }
+    
+    // Use centralized config for base URL - static files are served from the same domain
+    const apiUrl = getApiUrl();
+    let baseUrl = apiUrl;
+    
+    // Remove /api from the end if it exists
+    if (baseUrl.endsWith('/api')) {
+      baseUrl = baseUrl.slice(0, -4); // Remove '/api'
+    } else if (baseUrl.endsWith('/api/')) {
+      baseUrl = baseUrl.slice(0, -5); // Remove '/api/'
+    }
+    
+    // Ensure the base URL is properly formatted
+    const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+    const imageUrl = `${cleanBaseUrl}/static/${image}`;
+    
+    // Validate URL format
+    try {
+      new URL(imageUrl);
+      return imageUrl;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const getPlaceholderImage = (employeeName: string) => {
+    return `https://placehold.co/400x400/6366f1/ffffff?text=${employeeName.charAt(0).toUpperCase()}`;
+  };
+
+  // Simple image component without complex retry logic
+  const ResponsiveEmployeeImage = ({ employee }: { employee: Employee }) => {
+    const actualImageUrl = getImageUrl(employee);
+    const placeholderUrl = getPlaceholderImage(employee.name);
+    
+    return (
+      <img 
+        src={actualImageUrl || placeholderUrl}
+        alt={employee.name}
+        className="w-full h-full object-cover"
+        loading="lazy"
+        onError={(e) => {
+          e.currentTarget.src = placeholderUrl;
+        }}
+        style={{ 
+          display: 'block',
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover'
+        }}
+      />
+    );
   };
 
   const handleDelete = async (employee: any) => {
@@ -84,29 +162,42 @@ export function EmployeesList({ employees, managers }: { employees: Employee[], 
     }
   };
 
+  // Pagination calculations
+  const totalPages = Math.ceil(employees.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentEmployees = employees.slice(startIndex, endIndex);
+
+  // Reset to first page when employees change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [employees.length]);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    // Scroll to top when page changes
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   if (isMobile) {
     return (
       <>
         <div className="space-y-3 p-2 sm:p-4 md:p-0">
-          {employees.map((employee) => (
+          {currentEmployees.map((employee) => (
             <Card key={employee.id} className="shadow-md">
               <CardHeader className="flex flex-row items-start justify-between gap-2">
                 <div className="flex items-center gap-3 min-w-0">
-                  <Avatar 
-                    className="cursor-pointer h-12 w-12" 
+                  <div 
+                    className="cursor-pointer h-12 w-12 rounded-full overflow-hidden relative"
                     onClick={() => {
-                      const img = getImageUrl(employee.image);
-                      if (img) setPreviewImage(img);
+                      const img = getImageUrl(employee);
+                      if (img) {
+                        setPreviewImage(img);
+                      }
                     }}
                   >
-                    <AvatarImage 
-                      src={getImageUrl(employee.image) || `https://placehold.co/48x48.png`} 
-                      alt={employee.name}
-                    />
-                    <AvatarFallback className="h-12 w-12 text-lg">
-                      {employee.name.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
+                    <ResponsiveEmployeeImage employee={employee} />
+                  </div>
                   <div className="min-w-0">
                     <CardTitle className="text-base sm:text-lg truncate">{employee.name}</CardTitle>
                     <CardDescription className="text-xs sm:text-base truncate">{employee.id}</CardDescription>
@@ -118,13 +209,78 @@ export function EmployeesList({ employees, managers }: { employees: Employee[], 
                 <p className="truncate"><strong className="text-muted-foreground">Email:</strong> {employee.email}</p>
                 <p className="truncate"><strong className="text-muted-foreground">Manager:</strong> {getManagerName(employee.managerId)}</p>
                 <div className="flex flex-col sm:flex-row gap-2 pt-2">
-                  {!isReadonly && <EditEmployeeModal employee={employee} managers={managers} />}
+                  {!isReadonly && <EditEmployeeModal employee={employee} managers={managers} onRefresh={onRefresh} />}
                   {!isReadonly && <DeleteAction employee={employee} onDelete={handleDelete} />}
                 </div>
               </CardContent>
             </Card>
           ))}
         </div>
+
+        {/* Pagination Controls - Mobile */}
+        {totalPages > 1 && (
+          <div className="flex flex-col items-center gap-3 p-4 border-t">
+            {/* Page Info */}
+            <span className="text-sm text-muted-foreground">
+              Page {currentPage} of {totalPages}
+            </span>
+            
+            {/* Simple Pagination Controls */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="flex-shrink-0"
+              >
+                ← Previous
+              </Button>
+              
+              <span className="text-sm text-muted-foreground px-2">
+                {currentPage} of {totalPages}
+              </span>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="flex-shrink-0"
+              >
+                Next →
+              </Button>
+            </div>
+            
+            {/* Quick Page Numbers for Mobile */}
+            <div className="flex items-center gap-1 flex-wrap justify-center">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={currentPage === pageNum ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handlePageChange(pageNum)}
+                    className="w-8 h-8 text-xs"
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Image Preview Modal */}
         <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
@@ -135,10 +291,10 @@ export function EmployeesList({ employees, managers }: { employees: Employee[], 
             {previewImage && (
               <div className="relative w-full h-64 rounded-lg overflow-hidden">
                 <Image 
-                  src={previewImage} 
+                  src={previewImage || ''} 
                   alt="Employee photo" 
-                  layout="fill" 
-                  objectFit="cover"
+                  fill
+                  className="object-cover"
                 />
               </div>
             )}
@@ -164,24 +320,20 @@ export function EmployeesList({ employees, managers }: { employees: Employee[], 
             </TableRow>
           </TableHeader>
           <TableBody>
-            {employees.map((employee) => (
+            {currentEmployees.map((employee) => (
               <TableRow key={employee.id}>
                 <TableCell>
-                  <Avatar 
-                    className="cursor-pointer h-10 w-10" 
+                  <div 
+                    className="cursor-pointer h-10 w-10 rounded-full overflow-hidden"
                     onClick={() => {
-                      const img = getImageUrl(employee.image);
-                      if (img) setPreviewImage(img);
+                      const img = getImageUrl(employee);
+                      if (img) {
+                        setPreviewImage(img);
+                      }
                     }}
                   >
-                    <AvatarImage 
-                      src={getImageUrl(employee.image) || `https://placehold.co/40x40.png`} 
-                      alt={employee.name}
-                    />
-                    <AvatarFallback className="h-10 w-10">
-                      {employee.name.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
+                    <ResponsiveEmployeeImage employee={employee} />
+                  </div>
                 </TableCell>
                 <TableCell className="font-medium truncate max-w-[120px]">{employee.name}</TableCell>
                 <TableCell className="hidden md:table-cell text-muted-foreground truncate max-w-[100px]">{employee.id}</TableCell>
@@ -193,16 +345,81 @@ export function EmployeesList({ employees, managers }: { employees: Employee[], 
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <div className="flex gap-1 justify-end">
-                    {!isReadonly && <EditEmployeeModal employee={employee} managers={managers} />}
-                    {!isReadonly && <DeleteAction employee={employee} onDelete={handleDelete} />}
-                  </div>
+                                  <div className="flex gap-1 justify-end">
+                  {!isReadonly && <EditEmployeeModal employee={employee} managers={managers} onRefresh={onRefresh} />}
+                  {!isReadonly && <DeleteAction employee={employee} onDelete={handleDelete} />}
+                </div>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
+
+      {/* Pagination Controls - Desktop */}
+      {totalPages > 1 && (
+        <div className="flex flex-col items-center gap-4 p-6 border-t">
+          {/* Page Info */}
+          <span className="text-sm text-muted-foreground">
+            Showing {startIndex + 1}-{Math.min(endIndex, employees.length)} of {employees.length} employees
+          </span>
+          
+          {/* Simple Pagination Controls */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="flex-shrink-0"
+            >
+              ← Previous
+            </Button>
+            
+            <span className="text-sm text-muted-foreground px-2">
+              {currentPage} of {totalPages}
+            </span>
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="flex-shrink-0"
+            >
+              Next →
+            </Button>
+          </div>
+          
+          {/* Page Numbers */}
+          <div className="flex items-center gap-1 flex-wrap justify-center">
+            {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
+              let pageNum;
+              if (totalPages <= 7) {
+                pageNum = i + 1;
+              } else if (currentPage <= 4) {
+                pageNum = i + 1;
+              } else if (currentPage >= totalPages - 3) {
+                pageNum = totalPages - 6 + i;
+              } else {
+                pageNum = currentPage - 3 + i;
+              }
+              
+              return (
+                <Button
+                  key={pageNum}
+                  variant={currentPage === pageNum ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => handlePageChange(pageNum)}
+                  className="w-8 h-8 text-xs"
+                >
+                  {pageNum}
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Image Preview Modal */}
       <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
@@ -212,12 +429,12 @@ export function EmployeesList({ employees, managers }: { employees: Employee[], 
           </DialogHeader>
           {previewImage && (
             <div className="relative w-full h-64 rounded-lg overflow-hidden">
-              <Image 
-                src={previewImage} 
-                alt="Employee photo" 
-                layout="fill" 
-                objectFit="cover"
-              />
+                <Image 
+                  src={previewImage || ''} 
+                  alt="Employee photo" 
+                  fill
+                  className="object-cover"
+                />
             </div>
           )}
         </DialogContent>

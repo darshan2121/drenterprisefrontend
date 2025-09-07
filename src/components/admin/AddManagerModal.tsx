@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, PlusCircle } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -20,6 +21,7 @@ import { useDispatch } from "react-redux";
 import { createManager } from "@/store/slices/managerSlice";
 import axios from "axios";
 import { authService } from "@/services/authService";
+import { useDebouncedCallback } from "@/hooks/useDebounce";
 
 // Type for field suggestions
 type FieldSuggestions = {
@@ -44,6 +46,9 @@ export function AddManagerModal() {
     location: "",
     mobile: "",
   });
+
+  // Status state
+  const [isActive, setIsActive] = useState(true);
 
   // Suggestions state
   const [suggestions, setSuggestions] = useState<FieldSuggestions>({
@@ -121,8 +126,16 @@ export function AddManagerModal() {
     return () => clearTimeout(timer);
   }, [form, activeField]);
 
-  const handleInputChange = (field: string, value: string) => {
+  // Debounced handler for form inputs
+  const debouncedSetForm = useDebouncedCallback((field: string, value: string) => {
     setForm(prev => ({ ...prev, [field]: value }));
+  }, 300);
+
+  const handleInputChange = (field: string, value: string) => {
+    // Update immediately for UI responsiveness
+    setForm(prev => ({ ...prev, [field]: value }));
+    // Also debounce for any side effects
+    debouncedSetForm(field, value);
     setActiveField(field);
   };
 
@@ -174,19 +187,38 @@ export function AddManagerModal() {
 
   const handleSaveChanges = async () => {
     if (!validateForm()) return;
+    
+    const currentAdmin = authService.getCurrentUser();
+    if (!currentAdmin?.id) {
+      toast({
+        title: "Error",
+        description: "Unable to identify current admin. Please log in again.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setIsLoading(true);
+    
+    const managerData = {
+      name: form.name,
+      email: form.email,
+      adminId: currentAdmin.id,
+      password: form.password,
+      address: form.location,
+      location: form.location,
+      teamSize: form.teamSize ? Number(form.teamSize) : undefined,
+      mobile: form.mobile,
+      isActive: isActive,
+      status: isActive ? "Active" : "Inactive",
+    };
+    
+    console.log('🔄 [AddManagerModal] Creating manager with data:', managerData);
+    console.log('🔄 [AddManagerModal] isActive value:', isActive);
+    console.log('🔄 [AddManagerModal] status value:', isActive ? "Active" : "Inactive");
+    
     try {
-      await dispatch(createManager({
-        name: form.name,
-        email: form.email,
-        adminId: "685f0aeb984f9d6919377447",
-        password: form.password,
-        address: form.location,
-        location: form.location,
-        teamSize: form.teamSize ? Number(form.teamSize) : undefined,
-        mobile: form.mobile,
-        status: "Active",
-      }) as any);
+      await dispatch(createManager(managerData) as any);
       
       toast({
         title: "Success!",
@@ -202,6 +234,7 @@ export function AddManagerModal() {
         location: "",
         mobile: "",
       });
+      setIsActive(true);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -346,6 +379,22 @@ export function AddManagerModal() {
                 autoComplete="off"
               />
               {renderSuggestions("mobile")}
+            </div>
+          </div>
+
+          {/* Status Field */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 items-center gap-4">
+            <Label htmlFor="status" className="text-left sm:text-right">Account Status</Label>
+            <div className="sm:col-span-3 flex items-center space-x-2">
+              <Switch 
+                id="status" 
+                checked={isActive} 
+                onCheckedChange={setIsActive} 
+                disabled={isLoading} 
+              />
+              <Label htmlFor="status" className="text-sm">
+                {isActive ? 'Active (Can login)' : 'Inactive (Cannot login)'}
+              </Label>
             </div>
           </div>
         </div>

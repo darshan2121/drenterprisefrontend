@@ -28,6 +28,8 @@ import { addEmployee } from "@/store/slices/employeeSlice";
 import type { Manager } from "@/store/slices/managerSlice";
 import { authService } from "@/services/authService";
 import Image from "next/image";
+import { getApiUrl } from "@/lib/config";
+import { useDebouncedCallback } from "@/hooks/useDebounce";
 
 export function AddEmployeeModal({ managers = [], managerId, createdBy, ...props }: { managers?: { _id: string; name: string }[]; managerId?: string, createdBy?: string }) {
 
@@ -45,7 +47,7 @@ export function AddEmployeeModal({ managers = [], managerId, createdBy, ...props
   const [photoDataUri, setPhotoDataUri] = useState<string | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
-  const [step, setStep] = useState<"idle" | "capturing" | "preview">("idle");
+  const [step, setStep] = useState<"idle" | "capturing" | "preview" | "loading">("idle");
   const { toast } = useToast();
   const dispatch = useDispatch();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -86,9 +88,17 @@ export function AddEmployeeModal({ managers = [], managerId, createdBy, ...props
     };
   }, [stopCamera]);
 
+  // Debounced handlers for form inputs
+  const debouncedSetForm = useDebouncedCallback((name: string, value: string) => {
+    setForm(f => ({ ...f, [name]: value }));
+  }, 300);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+    // Update immediately for UI responsiveness
     setForm(f => ({ ...f, [name]: value }));
+    // Also debounce for any side effects
+    debouncedSetForm(name, value);
   };
 
   const handleManagerChange = (value: string) => {
@@ -140,7 +150,8 @@ export function AddEmployeeModal({ managers = [], managerId, createdBy, ...props
     const ctx = canvas.getContext("2d");
     if (ctx) {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUri = canvas.toDataURL("image/jpeg");
+      const dataUri = canvas.toDataURL("image/jpeg", 0.8); // 80% quality for better file size
+      console.log('Photo captured, dimensions:', canvas.width, 'x', canvas.height);
       setPhotoDataUri(dataUri);
     }
     stopCamera();
@@ -151,19 +162,42 @@ export function AddEmployeeModal({ managers = [], managerId, createdBy, ...props
     const file = event.target.files?.[0];
     if (!file) return;
 
+    // Validate file type
     if (!file.type.startsWith("image/")) {
       toast({
         variant: "destructive",
         title: "Invalid File",
-        description: "Please select an image file.",
+        description: "Please select an image file (JPEG, PNG, etc.).",
+      });
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (file.size > maxSize) {
+      toast({
+        variant: "destructive",
+        title: "File Too Large",
+        description: "Please select an image smaller than 5MB.",
       });
       return;
     }
     
+    setStep("loading");
     const reader = new FileReader();
     reader.onload = (e) => {
-      setPhotoDataUri(e.target?.result as string);
+      const result = e.target?.result as string;
+      console.log('File loaded, size:', file.size, 'type:', file.type);
+      setPhotoDataUri(result);
       setStep("preview");
+    };
+    reader.onerror = () => {
+      setStep("idle");
+      toast({
+        variant: "destructive",
+        title: "File Read Error",
+        description: "Failed to read the selected file. Please try again.",
+      });
     };
     reader.readAsDataURL(file);
     event.target.value = '';
@@ -246,7 +280,11 @@ export function AddEmployeeModal({ managers = [], managerId, createdBy, ...props
       // Create FormData for image upload
       const formData = new FormData();
       if (photoDataUri) {
-        formData.append('image', dataURItoFile(photoDataUri, 'employee.jpg'));
+        const timestamp = Date.now();
+        const filename = `employee_${timestamp}.jpg`;
+        const imageFile = dataURItoFile(photoDataUri, filename);
+        console.log('Image file being uploaded:', imageFile);
+        formData.append('image', imageFile);
       }
       formData.append('name', form.name);
       formData.append('email', form.email);
@@ -257,8 +295,13 @@ export function AddEmployeeModal({ managers = [], managerId, createdBy, ...props
       formData.append('createdBy', createdBy);
       formData.append('isCreatedByAdmin', 'true');
 
+      console.log('FormData contents:');
+      for (let [key, value] of formData.entries()) {
+        console.log(key, value);
+      }
+
       // Use the API function that handles FormData
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5678/api'}/employee`, {
+      const response = await fetch(`${getApiUrl()}/employee`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('adminToken')}`
@@ -272,6 +315,7 @@ export function AddEmployeeModal({ managers = [], managerId, createdBy, ...props
       }
 
       const result = await response.json();
+      console.log('API Response:', result);
 
       toast({
         title: "Success!",
@@ -280,6 +324,7 @@ export function AddEmployeeModal({ managers = [], managerId, createdBy, ...props
       setIsOpen(false);
       resetState();
     } catch (err: any) {
+      console.error('Error adding employee:', err);
       toast({
         title: "Error",
         description: err.message || "Failed to add employee. Please check console for details.",
@@ -299,7 +344,7 @@ export function AddEmployeeModal({ managers = [], managerId, createdBy, ...props
 
   console.log("Managers:", managers);
 
-  const renderImageSection = () => {
+    const renderImageSection = () => {
     switch(step) {
       case 'idle':
         return (
@@ -325,11 +370,25 @@ export function AddEmployeeModal({ managers = [], managerId, createdBy, ...props
             </button>
           </div>
         );
+      case 'loading':
+        return (
+          <div className="my-4 w-full h-48 sm:h-64 rounded-lg bg-muted flex items-center justify-center overflow-hidden">
+            <div className="text-center text-muted-foreground flex flex-col items-center gap-2">
+              <Loader2 className="h-12 w-12 animate-spin" />
+              <p>Processing image...</p>
+            </div>
+          </div>
+        );
       case 'preview':
         return (
           <div className="my-4 w-full h-48 sm:h-64 rounded-lg bg-muted flex items-center justify-center overflow-hidden relative">
             {photoDataUri && (
-              <Image src={photoDataUri} alt="Employee photo preview" layout="fill" objectFit="cover" />
+              <Image 
+                src={photoDataUri} 
+                alt="Employee photo preview" 
+                fill
+                className="object-cover"
+              />
             )}
           </div>
         );

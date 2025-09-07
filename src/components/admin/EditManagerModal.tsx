@@ -139,17 +139,26 @@ export function EditManagerModal({ manager }: { manager: Manager }) {
 
   const handleSaveChanges = async () => {
     setIsLoading(true);
+    
+    const updateData = {
+      name: form.name,
+      email: form.email,
+      teamSize: form.teamSize,
+      address: form.location,
+      location: form.location,
+      isActive: status,
+      status: status ? "Active" : "Inactive",
+    };
+    
+    console.log('🔄 [EditManagerModal] Updating manager:', manager._id);
+    console.log('🔄 [EditManagerModal] Update data:', updateData);
+    console.log('🔄 [EditManagerModal] isActive value:', status);
+    console.log('🔄 [EditManagerModal] status value:', status ? "Active" : "Inactive");
+    
     try {
       await dispatch(editManager({
         id: manager._id,
-        body: {
-          name: form.name,
-          email: form.email,
-          teamSize: form.teamSize,
-          address: form.location,
-          location: form.location,
-          status: status ? "Active" : "Inactive",
-        },
+        body: updateData,
       }) as any);
       
       toast({
@@ -241,7 +250,7 @@ export function EditManagerModal({ manager }: { manager: Manager }) {
           </div>
 
           {/* Team Size Field */}
-          <div className="grid grid-cols-4 items-center gap-4">
+          {/* <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="teamSize" className="text-right">Team Size</Label>
             <Input
               id="teamSize"
@@ -251,7 +260,7 @@ export function EditManagerModal({ manager }: { manager: Manager }) {
               className="col-span-3"
               disabled={isLoading}
             />
-          </div>
+          </div> */}
 
           {/* Location Field with Suggestions */}
           <div className="grid grid-cols-4 items-center gap-4">
@@ -272,7 +281,7 @@ export function EditManagerModal({ manager }: { manager: Manager }) {
 
           {/* Status Field */}
           <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="status" className="text-right">Status</Label>
+            <Label htmlFor="status" className="text-right">Account Status</Label>
             <div className="col-span-3 flex items-center space-x-2">
               <Switch 
                 id="status" 
@@ -280,7 +289,9 @@ export function EditManagerModal({ manager }: { manager: Manager }) {
                 onCheckedChange={setStatus} 
                 disabled={isLoading} 
               />
-              <Label htmlFor="status">{status ? 'Active' : 'Inactive'}</Label>
+              <Label htmlFor="status" className="text-sm">
+                {status ? 'Active (Can login)' : 'Inactive (Cannot login)'}
+              </Label>
             </div>
           </div>
         </div>

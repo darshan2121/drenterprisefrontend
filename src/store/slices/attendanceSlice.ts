@@ -40,10 +40,45 @@ export const clockIn = createAsyncThunk<any, FormData>(
   'attendance/clockIn',
   async (formData, thunkAPI) => {
     try {
+      console.log('[AttendanceSlice] Clock in request data:', {
+        employeeId: formData.get('employeeId'),
+        latitude: formData.get('latitude'),
+        longitude: formData.get('longitude'),
+        address: formData.get('address'),
+        shift: formData.get('shift'),
+        hasImage: !!formData.get('stepInImage')
+      });
+      
       const res = await clockInAttendance(formData);
+      console.log('[AttendanceSlice] Clock in success:', res);
       return res;
     } catch (err: any) {
-      return thunkAPI.rejectWithValue(err.message || 'Failed to clock in');
+      console.error('[AttendanceSlice] Clock in error:', err);
+      
+      // Provide more specific error messages based on error type
+      let errorMessage = 'Failed to clock in';
+      
+      if (err.message) {
+        if (err.message.includes('401')) {
+          errorMessage = 'Authentication failed. Please log in again.';
+        } else if (err.message.includes('403')) {
+          errorMessage = 'Access denied. You may not have permission to clock in.';
+        } else if (err.message.includes('404')) {
+          errorMessage = 'Employee not found. Please contact your administrator.';
+        } else if (err.message.includes('409')) {
+          errorMessage = 'Already clocked in today. Cannot clock in again.';
+        } else if (err.message.includes('422')) {
+          errorMessage = 'Invalid data provided. Please check your location and try again.';
+        } else if (err.message.includes('500')) {
+          errorMessage = 'Server error. Please try again later.';
+        } else if (err.message.includes('Network') || err.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your internet connection.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
+      return thunkAPI.rejectWithValue(errorMessage);
     }
   }
 );
@@ -52,10 +87,43 @@ export const clockOut = createAsyncThunk<any, FormData>(
   'attendance/clockOut',
   async (formData, thunkAPI) => {
     try {
+      console.log('[AttendanceSlice] Clock out request data:', {
+        attendanceId: formData.get('attendanceId'),
+        latitude: formData.get('latitude'),
+        longitude: formData.get('longitude'),
+        address: formData.get('address')
+      });
+      
       const res = await clockOutAttendance(formData);
+      console.log('[AttendanceSlice] Clock out success:', res);
       return res;
     } catch (err: any) {
-      return thunkAPI.rejectWithValue(err.message || 'Failed to clock out');
+      console.error('[AttendanceSlice] Clock out error:', err);
+      
+      // Provide more specific error messages based on error type
+      let errorMessage = 'Failed to clock out';
+      
+      if (err.message) {
+        if (err.message.includes('401')) {
+          errorMessage = 'Authentication failed. Please log in again.';
+        } else if (err.message.includes('403')) {
+          errorMessage = 'Access denied. You may not have permission to clock out.';
+        } else if (err.message.includes('404')) {
+          errorMessage = 'Attendance record not found. Please contact your administrator.';
+        } else if (err.message.includes('409')) {
+          errorMessage = 'Already clocked out today. Cannot clock out again.';
+        } else if (err.message.includes('422')) {
+          errorMessage = 'Invalid data provided. Please check your location and try again.';
+        } else if (err.message.includes('500')) {
+          errorMessage = 'Server error. Please try again later.';
+        } else if (err.message.includes('Network') || err.message.includes('fetch')) {
+          errorMessage = 'Network error. Please check your internet connection.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
+      return thunkAPI.rejectWithValue(errorMessage);
     }
   }
 );

@@ -92,10 +92,10 @@ export default function ManagersPage() {
                                 <Shield className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                               </div>
                               <div className="min-w-0 flex-1">
-                                <h4 className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                                <h4 className="font-medium text-gray-900 dark:text-gray-100 break-words">
                                   {manager.name || 'Unnamed Manager'}
                                 </h4>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                                <p className="text-sm text-gray-500 dark:text-gray-400 break-words">
                                   {manager.email || 'No email provided'}
                                 </p>
                               </div>

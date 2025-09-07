@@ -3,8 +3,9 @@ import type { ReactNode } from "react";
 import { SidebarProvider, Sidebar, SidebarInset } from "@/components/ui/sidebar";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { AdminHeader } from "@/components/admin/AdminHeader";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useCallback } from "react";
+import { useNavigation } from "@/hooks/useNavigation";
+
 
 function isAdminAuthenticated() {
   if (typeof window === "undefined") return false;
@@ -12,20 +13,25 @@ function isAdminAuthenticated() {
 }
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
-  const router = useRouter();
+  const { navigateReplace } = useNavigation();
   const [checking, setChecking] = useState(true);
   const [isAuthed, setIsAuthed] = useState(false);
+
+  // Memoize navigation function to prevent infinite loops
+  const handleNavigateToLogin = useCallback(() => {
+    navigateReplace("/admin/login");
+  }, [navigateReplace]);
 
   useEffect(() => {
     if (!isAdminAuthenticated()) {
       setIsAuthed(false);
       setChecking(false);
-      router.replace("/admin/login");
+      handleNavigateToLogin();
     } else {
       setIsAuthed(true);
       setChecking(false);
     }
-  }, [router]);
+  }, [handleNavigateToLogin]);
 
   if (checking || !isAuthed) {
     return (
@@ -127,12 +133,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       `}</style>
       
       <div className="admin-container flex min-h-screen bg-gray-50 dark:bg-gray-950">
-        {/* Sidebar - Hidden on mobile, visible on larger screens */}
-        <div className="hidden lg:block">
-          <Sidebar className="w-64 border-r border-gray-200 dark:border-gray-800">
-            <AdminSidebar />
-          </Sidebar>
-        </div>
+        {/* Sidebar - Responsive with mobile support */}
+        <Sidebar className="w-64 border-r border-gray-200 dark:border-gray-800">
+          <AdminSidebar />
+        </Sidebar>
         
         {/* Main Content Area */}
         <SidebarInset className="flex-1 flex flex-col min-w-0">
@@ -150,31 +154,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </SidebarInset>
       </div>
       
-      {/* Mobile Bottom Navigation (Optional) */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 z-50">
-        {/* <div className="flex items-center justify-around py-2 px-4"> */}
-          {/* Add your mobile navigation items here */}
-          {/* <button className="flex flex-col items-center space-y-1 py-2 px-3 text-xs text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400">
-            <div className="w-6 h-6 bg-gray-300 dark:bg-gray-600 rounded"></div>
-            <span>Dashboard</span>
-          </button>
-          <button className="flex flex-col items-center space-y-1 py-2 px-3 text-xs text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400">
-            <div className="w-6 h-6 bg-gray-300 dark:bg-gray-600 rounded"></div>
-            <span>Reports</span>
-          </button>
-          <button className="flex flex-col items-center space-y-1 py-2 px-3 text-xs text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400">
-            <div className="w-6 h-6 bg-gray-300 dark:bg-gray-600 rounded"></div>
-            <span>Employees</span>
-          </button>
-          <button className="flex flex-col items-center space-y-1 py-2 px-3 text-xs text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400">
-            <div className="w-6 h-6 bg-gray-300 dark:bg-gray-600 rounded"></div>
-            <span>Managers</span>
-          </button> */}
-        {/* </div> */}
-      </div>
-      
-      {/* Add bottom padding to account for mobile navigation */}
-      {/* <div className="lg:hidden h-16"></div> */}
+
     </SidebarProvider>
   );
 }

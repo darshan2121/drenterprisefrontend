@@ -33,6 +33,10 @@ export const fetchManagers = createAsyncThunk<Manager[]>('manager/fetchManagers'
 });
 
 export const createManager = createAsyncThunk<Manager, any>('manager/createManager', async (body) => {
+  console.log('🔄 [ManagerSlice] createManager - Request body:', body);
+  console.log('🔄 [ManagerSlice] createManager - isActive field:', body.isActive);
+  console.log('🔄 [ManagerSlice] createManager - status field:', body.status);
+  
   const data: any = await addManager(body);
   console.log('[Redux] createManager fulfilled:', data);
   return data.manager as Manager;
@@ -41,6 +45,11 @@ export const createManager = createAsyncThunk<Manager, any>('manager/createManag
 export const editManager = createAsyncThunk<Manager, { id: string, body: any }, { dispatch: AppDispatch }>(
   'manager/editManager',
   async ({ id, body }, { dispatch }) => {
+    console.log('🔄 [ManagerSlice] editManager - Manager ID:', id);
+    console.log('🔄 [ManagerSlice] editManager - Request body:', body);
+    console.log('🔄 [ManagerSlice] editManager - isActive field:', body.isActive);
+    console.log('🔄 [ManagerSlice] editManager - status field:', body.status);
+    
     const data: any = await updateManager(id, body);
     console.log('[Redux] editManager fulfilled:', data);
     // After edit, re-fetch the managers list to ensure state is up to date

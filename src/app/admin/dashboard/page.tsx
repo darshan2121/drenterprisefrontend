@@ -7,14 +7,44 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchDashboard } from "@/store/slices/dashboardSlice";
 import type { AppDispatch, RootState } from "@/store";
 import Image from "next/image";
 import { authService } from "@/services/authService";
-import { useRouter } from "next/navigation";
+import { useNavigation } from "@/hooks/useNavigation";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+
+// Function to get time-based greeting
+const getTimeBasedGreeting = (time: Date = new Date()) => {
+  const hour = time.getHours();
+  
+  if (hour >= 5 && hour < 12) {
+    return "Good Morning";
+  } else if (hour >= 12 && hour < 17) {
+    return "Good Afternoon";
+  } else if (hour >= 17 && hour < 21) {
+    return "Good Evening";
+  } else {
+    return "Good Night";
+  }
+};
+
+// Function to get greeting emoji based on time
+const getGreetingEmoji = (time: Date = new Date()) => {
+  const hour = time.getHours();
+  
+  if (hour >= 5 && hour < 12) {
+    return "🌅"; // Sunrise for morning
+  } else if (hour >= 12 && hour < 17) {
+    return "☀️"; // Sun for afternoon
+  } else if (hour >= 17 && hour < 21) {
+    return "🌆"; // Sunset for evening
+  } else {
+    return "🌙"; // Moon for night
+  }
+};
 
 const quickActions = [
   { title: 'Add New Employee', description: 'Create employee profile', href: '/admin/employees', icon: UserPlus, className: "bg-blue-50 dark:bg-blue-950 hover:bg-blue-100 dark:hover:bg-blue-900 border border-blue-200 dark:border-blue-800" },
@@ -45,36 +75,59 @@ function isAdminAuthenticated() {
 }
 
 export default function AdminDashboardPage() {
-  const router = useRouter();
+  const { navigateReplace, navigate } = useNavigation();
   const [checking, setChecking] = useState(true);
   const [isAuthed, setIsAuthed] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
   const dispatch = useDispatch<AppDispatch>();
   const { totalEmployees, totalManagers, workingEmployees, shiftWise, isLoading } = useSelector((state: RootState) => state.dashboard);
-  const isReadonly = authService.getCurrentUser()?.role === "readonly";
+  
+  // Memoize the readonly check to prevent unnecessary re-renders
+  const isReadonly = useCallback(() => {
+    return authService.getCurrentUser()?.role === "readonly";
+  }, []);
+
+  // Memoize navigation functions to prevent infinite loops
+  const handleNavigateToLogin = useCallback(() => {
+    navigateReplace("/admin/login");
+  }, [navigateReplace]);
+
+  const handleNavigateToReports = useCallback(() => {
+    navigateReplace("/admin/reports");
+  }, [navigateReplace]);
 
   useEffect(() => {
     if (!isAdminAuthenticated()) {
       setIsAuthed(false);
       setChecking(false);
-      router.replace("/admin/login");
+      handleNavigateToLogin();
     } else {
       setIsAuthed(true);
       setChecking(false);
     }
-  }, [router]);
+  }, [handleNavigateToLogin]);
 
   useEffect(() => {
     if (isAuthed) {
       dispatch(fetchDashboard());
     }
-  }, [dispatch, isAuthed]);
+  }, [isAuthed, dispatch]);
+
+  // Update time every minute
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Update every minute
+
+    return () => clearInterval(timer);
+  }, []);
 
   // Redirect readonly users to reports
   useEffect(() => {
-    if (isReadonly) {
-      router.replace("/admin/reports");
+    if (isReadonly()) {
+      handleNavigateToReports();
     }
-  }, [isReadonly, router]);
+  }, [isReadonly, handleNavigateToReports]);
 
   if (checking || !isAuthed) {
     return (
@@ -130,8 +183,46 @@ export default function AdminDashboardPage() {
         <div className="mb-6">
           <AdminPageHeader
             title="Dashboard"
-            subtitle="Welcome, Admin! Here's an overview of your platform."
+            subtitle={`${getTimeBasedGreeting(currentTime)}, ${authService.getCurrentUser()?.name || 'Admin'}! Here's an overview of your platform.`}
           />
+          
+          {/* Enhanced Greeting Section */}
+          <div className="mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/50 dark:to-indigo-950/50 rounded-lg border border-blue-200 dark:border-blue-800">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
+                  <span className="text-xl font-bold text-blue-600 dark:text-blue-400">
+                    {authService.getCurrentUser()?.name?.charAt(0)?.toUpperCase() || 'A'}
+                  </span>
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                    {getTimeBasedGreeting(currentTime)}, {authService.getCurrentUser()?.name || 'Admin'}! {getGreetingEmoji(currentTime)}
+                  </h2>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {currentTime.toLocaleDateString('en-US', { 
+                      weekday: 'long', 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                  {currentTime.toLocaleTimeString('en-US', { 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    hour12: true 
+                  })}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">
+                  Current Time
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Metrics Cards Grid - Responsive */}
@@ -218,18 +309,18 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Quick Actions Section */}
-        {!isReadonly && (
+        {!isReadonly() && (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 px-1">
               Quick Actions
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {quickActions.map((action) => (
-                <Link 
-                  href={action.href} 
+                <button 
+                  onClick={() => navigate(action.href)}
                   key={action.title} 
                   className={cn(
-                    "block p-4 rounded-xl transition-all duration-200 hover:scale-[1.02] border",
+                    "block p-4 rounded-xl transition-all duration-200 hover:scale-[1.02] border text-left w-full",
                     action.className
                   )}
                 >
@@ -246,7 +337,7 @@ export default function AdminDashboardPage() {
                       </p>
                     </div>
                   </div>
-                </Link>
+                </button>
               ))}
             </div>
           </div>

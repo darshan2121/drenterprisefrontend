@@ -20,15 +20,20 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 
 export function Header() {
-  const [managerName, setManagerName] = useState<string>("");
-  const [managerEmail, setManagerEmail] = useState<string>("");
+  const [managerData, setManagerData] = useState<any>(null);
   const [mounted, setMounted] = useState(false);
   const { logout } = useAuth();
 
   useEffect(() => {
     setMounted(true);
-    setManagerName(localStorage.getItem("managerName") || "");
-    setManagerEmail(localStorage.getItem("managerEmail") || "");
+    try {
+      const data = localStorage.getItem("managerData");
+      if (data) {
+        setManagerData(JSON.parse(data));
+      }
+    } catch (error) {
+      console.error('Error parsing manager data:', error);
+    }
   }, []);
 
   if (!mounted) return null;
@@ -46,12 +51,12 @@ export function Header() {
         <div className="flex items-center gap-2 sm:gap-3">
           <Avatar className="h-8 w-8 sm:h-9 sm:w-9">
             <AvatarImage src="https://placehold.co/40x40.png" alt="Manager" data-ai-hint="person woman" />
-            <AvatarFallback className="text-sm">{managerName.charAt(0) || "S"}</AvatarFallback>
+            <AvatarFallback className="text-sm">{managerData?.name?.charAt(0) || "S"}</AvatarFallback>
           </Avatar>
           <div className="flex-col hidden xs:flex">
-            <span className="text-sm font-semibold truncate max-w-[120px]">{managerName || "Supervisor"}</span>
+            <span className="text-sm font-semibold truncate max-w-[120px]">{managerData?.name || "Supervisor"}</span>
             <span className="text-xs text-muted-foreground truncate max-w-[120px]">
-              {managerEmail || "manager@example.com"}
+              {managerData?.email || "manager@example.com"}
             </span>
           </div>
         </div>

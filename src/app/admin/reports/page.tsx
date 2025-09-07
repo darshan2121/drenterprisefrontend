@@ -10,20 +10,31 @@ import { RootState } from "@/store";
 import { format } from "date-fns";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { http } from "@/lib/http";
+import { getApiUrl } from "@/lib/config";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { EditReportModal } from "@/components/admin/EditReportModal";
 import { BulkUpdateModal } from "@/components/admin/BulkUpdateModal";
 import { authService } from "@/services/authService";
 import { useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { HeaderActions } from "@/components/admin/ReportsTable";
-import { Edit3 } from "lucide-react";
+import { Edit3, Download, FileDown, RefreshCw, Loader2 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
+import { pdfDownloadService, PDFDownloadService } from "@/services/pdfDownloadService";
+import { PDFDownloadButton } from "@/components/ui/pdf-download-button";
+import { Button } from "@/components/ui/button";
 
 export default function ReportsPage() {
     const router = useRouter();
+    const pathname = usePathname();
     const isReadonly = authService.getCurrentUser()?.role === "readonly";
+    
+    console.log('📊 ReportsPage component loaded');
+    console.log('📊 Current user role:', authService.getCurrentUser()?.role);
+    console.log('📊 Is readonly:', isReadonly);
+    console.log('📊 Current pathname:', pathname);
 
     const dispatch = useDispatch();
     const attendanceList = useSelector((state: RootState) => state.attendance.attendanceList);
@@ -65,6 +76,28 @@ export default function ReportsPage() {
     
     // State for checkbox selection
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    
+    // Pagination state
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 15; // Show 15 reports per page for better performance
+
+    // Helper function to get image URL
+    const getImageUrl = (image: string | undefined) => {
+      if (!image) return undefined;
+      const apiUrl = getApiUrl();
+      let baseUrl = apiUrl;
+      
+      // Remove /api from the end if it exists
+      if (baseUrl.endsWith('/api')) {
+        baseUrl = baseUrl.slice(0, -4); // Remove '/api'
+      } else if (baseUrl.endsWith('/api/')) {
+        baseUrl = baseUrl.slice(0, -5); // Remove '/api/'
+      }
+      
+      const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+      const imageUrl = `${cleanBaseUrl}/static/${image}`;
+      return imageUrl;
+    };
 
     // Memoized fetch function
     const fetchAttendanceData = useCallback(() => {
@@ -93,10 +126,10 @@ export default function ReportsPage() {
       fetchAttendanceData();
     }, []); // Only run once on mount
     
-    // Clear selectedIds when filters change
+    // Clear selectedIds when filters change or when readonly status changes
     useEffect(() => {
       setSelectedIds([]);
-    }, [filters.shift]);
+    }, [filters.shift, isReadonly]);
 
     // Convert API data to expected format
     const formattedReports = useMemo(() => {
@@ -110,6 +143,8 @@ export default function ReportsPage() {
           stepOut: att.stepOut,
           shift: att.shift,
           employeeName: att.employeeId?.name,
+          employeeImage: att.employeeId?.image,
+          stepInImage: att.stepInImage,
           stepInDate: att.stepIn ? new Date(att.stepIn) : null,
           stepOutDate: att.stepOut ? new Date(att.stepOut) : null
         })));
@@ -161,11 +196,27 @@ export default function ReportsPage() {
           }
         };
 
+        // Debug original date format
+        if (att.stepIn) {
+          console.log('📅 Original stepIn date:', {
+            original: att.stepIn,
+            parsed: new Date(att.stepIn),
+            formatted: format(new Date(att.stepIn), 'yyyy-MM-dd'),
+            employee: att.employeeId?.name
+          });
+        }
+
         const formatted = {
           _id: att._id,
           date: att.stepIn ? format(new Date(att.stepIn), 'yyyy-MM-dd') : '--',
           employee: att.employeeId?.name || att.employeeId || 'Unknown',
+          employeeId: att.employeeId ? {
+            _id: att.employeeId._id,
+            name: att.employeeId.name,
+            image: att.employeeId.image
+          } : undefined,
           employeePhoto: att.employeeId?.photo || null,
+          stepIn: att.stepInImage,
           shift: att.shift || att.employeeId?.shift || 'Regular',
           location: att.address || '--',
           status: att.stepOut ? 'Present' as const : 'Absent' as const,
@@ -201,8 +252,20 @@ export default function ReportsPage() {
           const matchShift = !filters.shift || report.shift === filters.shift;
           
           // Date filter - handle both date object and string formats
-          const matchDate = !filters.date || 
-            (filters.date && report.date === format(filters.date, 'yyyy-MM-dd'));
+          let matchDate = true;
+          if (filters.date) {
+            const filterDateStr = format(filters.date, 'yyyy-MM-dd');
+            matchDate = report.date === filterDateStr;
+            
+            // Debug date filtering
+            console.log('🔍 Date filter debug:', {
+              filterDate: filters.date,
+              filterDateFormatted: filterDateStr,
+              reportDate: report.date,
+              employee: report.employee,
+              matchDate: matchDate
+            });
+          }
           
           return matchManager && matchEmployee && matchShift && matchDate;
         } catch (error) {
@@ -214,6 +277,23 @@ export default function ReportsPage() {
       console.log('Filtered reports count:', filtered.length);
       return filtered;
     }, [formattedReports, filters, employees, managers, attendanceList]); // Removed dataVersion dependency
+    
+    // Pagination calculations
+    const totalPages = Math.ceil(filteredReports.length / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const currentReports = filteredReports.slice(startIndex, endIndex);
+
+    // Reset to first page when filters change
+    useEffect(() => {
+      setCurrentPage(1);
+    }, [filters.managerId, filters.employeeId, filters.shift, filters.date]);
+
+    const handlePageChange = (page: number) => {
+      setCurrentPage(page);
+      // Scroll to top when page changes
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
     
     // Updated refresh handler that ensures data is refreshed
     const handleRefresh = useCallback(async () => {
@@ -300,7 +380,7 @@ export default function ReportsPage() {
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
                           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                            Reports ({filteredReports.length})
+                            Reports ({filteredReports.length}) {totalPages > 1 && `- Page ${currentPage} of ${totalPages}`}
                           </h3>
                           {filters.shift && selectedIds.length > 0 && (
                             <span className="text-sm text-blue-600 dark:text-blue-400 font-medium bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded">
@@ -309,49 +389,28 @@ export default function ReportsPage() {
                           )}
                         </div>
                         <div className="flex gap-2 items-center">
-                          <HeaderActions
-                            onDownloadPdf={() => {
-                              const doc = new jsPDF();
-                              doc.text("Attendance Report", 14, 16);
-                              autoTable(doc, {
-                                head: [[
-                                  "Date",
-                                  "Employee",
-                                  "Shift",
-                                  "Location",
-                                  "Status",
-                                  "Clock In",
-                                  "Clock Out",
-                                ]],
-                                body: filteredReports.map((report) => [
-                                  report.date,
-                                  report.employee,
-                                  report.shift,
-                                  report.location,
-                                  report.status,
-                                  report.clockIn,
-                                  report.clockOut,
-                                ]),
-                                startY: 20,
-                              });
-                              if (
-                                typeof window !== "undefined" &&
-                                !!window.ReactNativeWebView
-                              ) {
-                                const pdfBase64 = doc.output("datauristring");
-                                window.ReactNativeWebView?.postMessage(
-                                  JSON.stringify({
-                                    type: "download",
-                                    fileType: "pdf",
-                                    fileName: "attendance-report.pdf",
-                                    data: pdfBase64,
-                                  })
-                                );
-                              } else {
-                                doc.save("attendance-report.pdf");
-                              }
+                          <PDFDownloadButton
+                            reports={currentReports} // Use paginated data for display
+                            allReports={filteredReports} // Use all filtered data for PDF generation
+                            fileName={`attendance-report-${new Date().toISOString().split('T')[0]}.pdf`}
+                            showProgress={true}
+                            includeImages={true}
+                            quality="high"
+                            onSuccess={() => {
+                              console.log('✅ Mobile PDF download completed successfully using enhanced service');
                             }}
-                            onDownloadXls={() => {
+                            onError={(error: Error) => {
+                              console.error('❌ Mobile PDF download failed:', error);
+                              alert('Failed to generate PDF. Please try again.');
+                            }}
+                          >
+                            {/* <Download className="mr-2 h-4 w-4" /> */}
+                            PDF
+                          </PDFDownloadButton>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
                               const worksheet = XLSX.utils.json_to_sheet(
                                 filteredReports.map((report) => ({
                                   Date: report.date,
@@ -392,14 +451,23 @@ export default function ReportsPage() {
                                 );
                               }
                             }}
-                            onRefresh={handleRefresh}
-                            loading={isLoading || isUpdating}
-                          />
+                          >
+                            <FileDown className="mr-2 h-4 w-4" />
+                            XLS
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleRefresh}
+                            disabled={isLoading || isUpdating}
+                          >
+                            <RefreshCw className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
                       
                       {/* Full Width Bulk Update Button */}
-                      {filters.shift && selectedIds.length > 0 && (
+                      {filters.shift && selectedIds.length > 0 && !isReadonly && (
                         <div className="mb-4">
                           <BulkUpdateModal
                             selectedIds={selectedIds}
@@ -440,16 +508,16 @@ export default function ReportsPage() {
                     ) : (
                       <div className="space-y-3">
                         {/* Mobile Select All Header */}
-                        {filters.shift && (
+                        {filters.shift && !isReadonly && (
                           <div className="flex items-center gap-3 mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                             <input
                               type="checkbox"
-                              checked={filteredReports.length > 0 && filteredReports.every(report => 
+                              checked={currentReports.length > 0 && currentReports.every(report => 
                                 selectedIds.includes(report._id || '')
                               )}
                               onChange={(e) => {
                                 if (e.target.checked) {
-                                  setSelectedIds(filteredReports.map(report => report._id || '').filter(Boolean));
+                                  setSelectedIds(currentReports.map(report => report._id || '').filter(Boolean));
                                 } else {
                                   setSelectedIds([]);
                                 }
@@ -458,22 +526,22 @@ export default function ReportsPage() {
                             />
                             <div className="flex-1">
                               <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">
-                                Select All ({filteredReports.length} records)
+                                Select All ({currentReports.length} records on this page)
                               </span>
                               {selectedIds.length > 0 && (
                                 <div className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
-                                  {selectedIds.length} of {filteredReports.length} selected
+                                  {selectedIds.length} selected (from all pages)
                                 </div>
                               )}
                             </div>
                           </div>
                         )}
                         
-                        {filteredReports.map((report) => (
+                        {currentReports.map((report) => (
                           <div key={report._id} className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2 flex-1 min-w-0">
-                                {filters.shift && (
+                                {filters.shift && !isReadonly && (
                                   <input
                                     type="checkbox"
                                     checked={selectedIds.includes(report._id || '')}
@@ -487,6 +555,26 @@ export default function ReportsPage() {
                                     className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 flex-shrink-0"
                                   />
                                 )}
+                                {/* Employee Profile Image */}
+                                <div className="w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
+                                  {(report.employeeId?.image || report.employeePhoto) ? (
+                                    <img
+                                      src={getImageUrl(report.employeeId?.image || report.employeePhoto) || `https://placehold.co/400x400/6366f1/ffffff?text=${report.employee?.charAt(0).toUpperCase() || 'E'}`}
+                                      alt={report.employee}
+                                      className="w-full h-full object-cover"
+                                      loading="lazy"
+                                      onError={(e) => {
+                                        e.currentTarget.src = `https://placehold.co/400x400/6366f1/ffffff?text=${report.employee?.charAt(0).toUpperCase() || 'E'}`;
+                                      }}
+                                    />
+                                  ) : (
+                                    <img
+                                      src={`https://placehold.co/400x400/6366f1/ffffff?text=${report.employee?.charAt(0).toUpperCase() || 'E'}`}
+                                      alt={report.employee}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  )}
+                                </div>
                                 <h4 className="font-medium text-gray-900 dark:text-gray-100 truncate pr-2">
                                   {report.employee}
                                 </h4>
@@ -563,7 +651,7 @@ export default function ReportsPage() {
                         ))}
                         
                         {/* Mobile Bulk Update Button */}
-                        {filters.shift && selectedIds.length > 0 && (
+                        {filters.shift && selectedIds.length > 0 && !isReadonly && (
                           <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                             <BulkUpdateModal
                               selectedIds={selectedIds}
@@ -598,6 +686,117 @@ export default function ReportsPage() {
                         )}
                       </div>
                     )}
+                    
+                    {/* Pagination Controls - Mobile */}
+                    {totalPages > 1 && (
+                      <div className="flex flex-col items-center gap-3 p-4 border-t">
+                        {/* Page Info */}
+                        <span className="text-sm text-muted-foreground">
+                          Page {currentPage} of {totalPages}
+                        </span>
+                        
+                        {/* Touch Slider */}
+                        <div className="flex items-center gap-3 w-full max-w-xs">
+                          <button
+                            onClick={() => handlePageChange(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className="flex-shrink-0 w-10 h-10 border border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            ←
+                          </button>
+                          
+                          {/* Mobile Slider Track */}
+                          <div className="flex-1 relative">
+                            <div className="w-full h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-blue-500 rounded-full transition-all duration-300 ease-out"
+                                style={{ 
+                                  width: `${(currentPage / totalPages) * 100}%`
+                                }}
+                              />
+                            </div>
+                            
+                            {/* Mobile Slider Handle */}
+                            <div 
+                              className="absolute top-1/2 w-8 h-8 bg-blue-500 rounded-full border-3 border-white dark:border-gray-800 shadow-lg cursor-pointer transform -translate-y-1/2 -translate-x-4 transition-all duration-300 ease-out active:scale-95"
+                              style={{ 
+                                left: `${((currentPage - 1) / (totalPages - 1)) * 100}%`
+                              }}
+                              onTouchStart={(e) => {
+                                e.preventDefault();
+                                const handle = e.currentTarget;
+                                const track = handle.parentElement;
+                                if (!track) return;
+                                
+                                const handleTouchMove = (e: TouchEvent) => {
+                                  e.preventDefault();
+                                  const rect = track.getBoundingClientRect();
+                                  const touchX = e.touches[0].clientX - rect.left;
+                                  const percentage = Math.max(0, Math.min(1, touchX / rect.width));
+                                  const newPage = Math.round(percentage * (totalPages - 1)) + 1;
+                                  handlePageChange(Math.max(1, Math.min(totalPages, newPage)));
+                                };
+                                
+                                const handleTouchEnd = () => {
+                                  document.removeEventListener('touchmove', handleTouchMove);
+                                  document.removeEventListener('touchend', handleTouchEnd);
+                                };
+                                
+                                document.addEventListener('touchmove', handleTouchMove, { passive: false });
+                                document.addEventListener('touchend', handleTouchEnd);
+                              }}
+                              onClick={(e) => {
+                                const rect = e.currentTarget.parentElement?.getBoundingClientRect();
+                                if (rect) {
+                                  const clickX = e.clientX - rect.left;
+                                  const percentage = clickX / rect.width;
+                                  const newPage = Math.round(percentage * (totalPages - 1)) + 1;
+                                  handlePageChange(Math.max(1, Math.min(totalPages, newPage)));
+                                }
+                              }}
+                            />
+                          </div>
+                          
+                          <button
+                            onClick={() => handlePageChange(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className="flex-shrink-0 w-10 h-10 border border-gray-300 dark:border-gray-600 rounded-lg flex items-center justify-center text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            →
+                          </button>
+                        </div>
+                        
+                        {/* Quick Page Numbers for Mobile */}
+                        <div className="flex items-center gap-1 flex-wrap justify-center">
+                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            let pageNum;
+                            if (totalPages <= 5) {
+                              pageNum = i + 1;
+                            } else if (currentPage <= 3) {
+                              pageNum = i + 1;
+                            } else if (currentPage >= totalPages - 2) {
+                              pageNum = totalPages - 4 + i;
+                            } else {
+                              pageNum = currentPage - 2 + i;
+                            }
+                            
+                            return (
+                              <button
+                                key={pageNum}
+                                onClick={() => handlePageChange(pageNum)}
+                                className={`w-8 h-8 text-xs rounded-lg border transition-colors ${
+                                  currentPage === pageNum 
+                                    ? 'bg-blue-500 text-white border-blue-500' 
+                                    : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800'
+                                }`}
+                              >
+                                {pageNum}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -605,7 +804,8 @@ export default function ReportsPage() {
                 <div className="hidden sm:block">
                   <ReportsTable 
                     key={`reports-${attendanceList.length}`} // Force re-render when data changes
-                    reports={filteredReports} 
+                    reports={currentReports} // Use paginated data for table display
+                    allReports={filteredReports} // Pass all reports for PDF generation
                     onRefresh={handleRefresh} 
                     disableActions={isReadonly}
                     loading={isLoading || isUpdating}
@@ -618,6 +818,67 @@ export default function ReportsPage() {
                       shift: filters.shift,
                     }}
                   />
+                  
+                  {/* Desktop Pagination Controls */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between px-6 py-4 border-t bg-white dark:bg-gray-900">
+                      {/* Page Info */}
+                      <div className="text-sm text-gray-700 dark:text-gray-300">
+                        Showing {startIndex + 1} to {Math.min(endIndex, filteredReports.length)} of {filteredReports.length} results
+                      </div>
+                      
+                      {/* Pagination Controls */}
+                      <div className="flex items-center space-x-2">
+                        {/* Previous Button */}
+                        <button
+                          onClick={() => handlePageChange(currentPage - 1)}
+                          disabled={currentPage === 1}
+                          className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700"
+                        >
+                          Previous
+                        </button>
+                        
+                        {/* Page Numbers */}
+                        <div className="flex items-center space-x-1">
+                          {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
+                            let pageNum;
+                            if (totalPages <= 7) {
+                              pageNum = i + 1;
+                            } else if (currentPage <= 4) {
+                              pageNum = i + 1;
+                            } else if (currentPage >= totalPages - 3) {
+                              pageNum = totalPages - 6 + i;
+                            } else {
+                              pageNum = currentPage - 3 + i;
+                            }
+                            
+                            return (
+                              <button
+                                key={pageNum}
+                                onClick={() => handlePageChange(pageNum)}
+                                className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                                  currentPage === pageNum 
+                                    ? 'bg-blue-600 text-white' 
+                                    : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50 hover:text-gray-700 dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700'
+                                }`}
+                              >
+                                {pageNum}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        
+                        {/* Next Button */}
+                        <button
+                          onClick={() => handlePageChange(currentPage + 1)}
+                          disabled={currentPage === totalPages}
+                          className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 hover:text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700"
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

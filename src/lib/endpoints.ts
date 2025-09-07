@@ -1,5 +1,6 @@
-export const BASE_URL = "http://localhost:5678/api";
-// export const BASE_URL = "http://localhost:5678/api"
+import { getApiUrl } from './config';
+
+export const BASE_URL = getApiUrl();
 export const ENDPOINTS = {
   manager: {
     login: `${BASE_URL}/manager/login`,

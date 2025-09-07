@@ -9,6 +9,10 @@ export interface Admin {
   name: string;
   email: string;
   role: string;
+  isActive?: boolean;
+  mobile?: string;
+  address?: string;
+  createdAt?: string;
   [key: string]: any;
 }
 

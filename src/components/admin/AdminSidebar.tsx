@@ -27,6 +27,7 @@ import {
   UserCog,
   FileText,
   LogOut,
+  Shield,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -34,11 +35,14 @@ import { cn } from "@/lib/utils";
 import Image from "next/image";
 import { useAuth } from "@/hooks/useAuth";
 import { authService } from "@/services/authService";
+import { useRouter } from "next/navigation";
+import { useCallback } from "react";
 
 const menuItems = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/employees", label: "Employees", icon: Users },
   { href: "/admin/managers", label: "Supervisor", icon: UserCog },
+  { href: "/admin/admins", label: "Admins", icon: Shield },
   { href: "/admin/reports", label: "Reports", icon: FileText },
 ];
 
@@ -46,7 +50,10 @@ export function AdminSidebar() {
   const pathname = usePathname();
   const { state, setOpenMobile, isMobile } = useSidebar();
   const { logout } = useAuth();
-  const isReadonly = authService.getCurrentUser()?.role === "readonly";
+  const router = useRouter();
+  const isReadonly = useCallback(() => {
+    return authService.getCurrentUser()?.role === "readonly";
+  }, []);
 
   return (
     <>
@@ -67,15 +74,22 @@ export function AdminSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarMenu>
-          {(isReadonly
+          {(isReadonly()
             ? menuItems.filter(item => item.label === "Reports")
             : menuItems
           ).map((item) => (
             <SidebarMenuItem key={item.label}>
               <SidebarMenuButton
-                asChild
                 isActive={pathname.startsWith(item.href)}
                 tooltip={item.label}
+                onClick={() => {
+                  console.log('🔄 Sidebar navigation clicked:', item.href);
+                  router.push(item.href);
+                  // Always close mobile sidebar after navigation
+                  if (isMobile) {
+                    setOpenMobile(false);
+                  }
+                }}
                 className={
                   cn(
                     pathname.startsWith(item.href) ? "bg-primary/10 text-primary" : "",
@@ -85,24 +99,38 @@ export function AdminSidebar() {
                   )
                 }
               >
-                <Link
-                  href={item.href}
-                  onClick={() => {
-                    // Always close mobile sidebar after navigation
-                    if (isMobile) {
-                      setOpenMobile(false);
-                    }
-                  }}
-                  className="w-full h-full flex items-center gap-3"
-                >
-                  <item.icon className="h-6 w-6 flex-shrink-0" />
-                  <span className="font-medium truncate">{item.label}</span>
-                </Link>
+                <item.icon className="h-6 w-6 flex-shrink-0" />
+                <span className="font-medium truncate">{item.label}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
         </SidebarMenu>
       </SidebarContent>
+      
+      {/* User Info Section */}
+      <div className="px-4 py-3 border-t">
+        <div className={cn(
+          "flex items-center gap-3",
+          state === 'collapsed' && "justify-center"
+        )}>
+          <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+            <span className="text-sm font-medium text-primary">
+              {authService.getCurrentUser()?.name?.charAt(0)?.toUpperCase() || 'A'}
+            </span>
+          </div>
+          {state !== 'collapsed' && (
+            <div className="flex flex-col min-w-0">
+              <span className="text-sm font-medium text-foreground truncate">
+                {authService.getCurrentUser()?.name || 'Admin'}
+              </span>
+              <span className="text-xs text-muted-foreground truncate">
+                {authService.getCurrentUser()?.email || 'admin@example.com'}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+      
       <SidebarFooter>
         <SidebarSeparator />
         <AlertDialog>
