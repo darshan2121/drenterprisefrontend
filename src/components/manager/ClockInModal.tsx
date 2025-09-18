@@ -22,6 +22,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { clockIn, clockOut, fetchAttendanceId } from '@/store/slices/attendanceSlice';
 import { Tooltip } from "@/components/ui/tooltip";
 import { useDebouncedCallback } from "@/hooks/useDebounce";
+import { locationService, type LocationData } from "@/services/locationService";
 
 export function ClockInModal({ employee, attendanceId: propAttendanceId, status, onAttendanceChange }: {
   employee: { name: string; id: string };
@@ -39,6 +40,9 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
   const [latitude, setLatitude] = useState<string>('');
   const [longitude, setLongitude] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [locationData, setLocationData] = useState<LocationData | null>(null);
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
+  const [locationError, setLocationError] = useState<string>('');
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user'); // Add this state
   const [shift, setShift] = useState('morning');
   const [imageLoading, setImageLoading] = useState(false);
@@ -74,7 +78,44 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
     }
   }, [stream]);
 
-    const resetState = useCallback(() => {
+  // Auto-detect location when modal opens
+  const detectLocation = useCallback(async () => {
+    setIsDetectingLocation(true);
+    setLocationError('');
+    
+    try {
+      const location = await locationService.getCurrentLocation();
+      if (location) {
+        setLocationData(location);
+        setLatitude(location.latitude.toString());
+        setLongitude(location.longitude.toString());
+        setManualLocation(location.address);
+        toast({
+          title: "Location Detected",
+          description: `Current location: ${location.address}`,
+        });
+      } else {
+        setLocationError('Unable to detect location. Please enter manually.');
+        toast({
+          title: "Location Required",
+          description: "Please enter your location manually to continue.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Location detection failed:', error);
+      setLocationError('Location detection failed. Please enter manually.');
+      toast({
+        title: "Location Required",
+        description: "Please enter your location manually to continue.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDetectingLocation(false);
+    }
+  }, [toast]);
+
+  const resetState = useCallback(() => {
     stopCamera();
     setStep("idle");
     setPhotoDataUri(null);
@@ -85,6 +126,9 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
     setLongitude('');
     setImageLoading(false);
     setCameraReady(false);
+    setLocationData(null);
+    setLocationError('');
+    setIsDetectingLocation(false);
   }, [stopCamera]);
 
   useEffect(() => {
@@ -94,27 +138,16 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
     };
   }, [stopCamera]);
 
+  // Auto-detect location when modal opens
+  useEffect(() => {
+    if (isOpen && step === 'idle') {
+      detectLocation();
+    }
+  }, [isOpen, step, detectLocation]);
+
   useEffect(() => {
     if (isOpen) {
       console.log("[DEBUG] Modal opened for", employee.name, "employeeId:", employee.id);
-      // Get geolocation - check if we're on client side and geolocation is available
-      if (typeof window !== 'undefined' && navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            setLatitude(position.coords.latitude.toString());
-            setLongitude(position.coords.longitude.toString());
-          },
-          (error) => {
-            // Fallback to static coordinates (Bangalore example), no toast
-            setLatitude("12.9716");
-            setLongitude("77.5946");
-          }
-        );
-      } else {
-        // If geolocation is not available at all, no toast
-        setLatitude("12.9716");
-        setLongitude("77.5946");
-      }
       // Fetch current attendance status from Redux
       dispatch(fetchAttendanceId(employee.id) as any);
     }
@@ -407,7 +440,7 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
       toast({
         variant: "destructive",
         title: "Location Required",
-        description: "Please enter your location manually.",
+        description: "Please enter your location or wait for auto-detection to complete.",
       });
       return;
     }
@@ -522,7 +555,7 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
   };
 
   const isClockInDisabled = () => {
-    return !manualLocation.trim();
+    return !manualLocation.trim() || isDetectingLocation;
   }
   
   const flipCamera = useCallback(() => {
@@ -664,13 +697,53 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
                     <div className="space-y-4">
                         <Card>
                             <CardContent className="p-4 space-y-2">
-                                <Label htmlFor="manual-location">Location Name</Label>
+                                <Label htmlFor="manual-location">Location Name *</Label>
+                                {isDetectingLocation && (
+                                    <div className="flex items-center gap-2 text-sm text-blue-600">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        Detecting your location...
+                                    </div>
+                                )}
+                                {locationError && (
+                                    <div className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                                        {locationError}
+                                    </div>
+                                )}
+                                {locationData && !isDetectingLocation && (
+                                    <div className="text-sm text-green-600 bg-green-50 p-2 rounded">
+                                        ✅ Auto-detected: {locationData.address}
+                                    </div>
+                                )}
                                 <Input 
                                     id="manual-location"
-                                    defaultValue={manualLocation}
+                                    value={manualLocation}
                                     onChange={(e) => debouncedSetLocation(e.target.value)}
                                     placeholder="e.g., Main Office, Client Site"
+                                    className={!manualLocation.trim() ? "border-red-300" : ""}
+                                    required
                                 />
+                                <div className="flex gap-2">
+                                    <Button 
+                                        type="button"
+                                        variant="outline" 
+                                        size="sm"
+                                        onClick={detectLocation}
+                                        disabled={isDetectingLocation}
+                                        className="flex-1"
+                                    >
+                                        {isDetectingLocation ? (
+                                            <>
+                                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                                Detecting...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <RefreshCcw className="h-4 w-4 mr-2" />
+                                                Re-detect Location
+                                            </>
+                                        )}
+                                    </Button>
+                                </div>
                                 <Label htmlFor="shift">Shift</Label>
                                 <select
                                   id="shift"

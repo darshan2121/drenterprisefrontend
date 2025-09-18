@@ -385,36 +385,23 @@ export class PDFDownloadService {
         }
       };
 
-      // Prepare table data with images using EXACT SAME LOGIC as legacy method
-      const tableData = await Promise.all(
-        reports.map(async (report, index) => {
-          // Use employee profile image directly from report.employeeId.image
-          const imageUrl = getBestImageUrl(report, []); // Empty array since we prioritize report.employeeId.image
-          
-          let imageBase64 = null;
-          
-          if (imageUrl) {
-            imageBase64 = await convertImageToBase64(imageUrl, quality);
-          }
-          
-          return {
-            date: report.date,
-            employee: report.employee,
-            shift: getShiftLabel(report.shift),
-            location: report.location,
-            status: report.status,
-            clockIn: report.clockIn,
-            clockOut: report.clockOut,
-            image: imageBase64
-          };
-        })
-      );
+      // Prepare table data without images
+      const tableData = reports.map((report) => {
+        return {
+          date: report.date,
+          employee: report.employee,
+          shift: getShiftLabel(report.shift),
+          location: report.location,
+          status: report.status,
+          clockIn: report.clockIn,
+          clockOut: report.clockOut
+        };
+      });
 
       // Create the table with autoTable
       autoTable(doc, {
-        head: [['Photo', 'Date', 'Employee', 'Shift', 'Location', 'Status', 'Clock In', 'Clock Out']],
+        head: [['Date', 'Employee', 'Shift', 'Location', 'Status', 'Clock In', 'Clock Out']],
         body: tableData.map((row) => [
-          '', // Empty cell for photo - we'll add images manually
           row.date,
           row.employee,
           row.shift,
@@ -441,78 +428,18 @@ export class PDFDownloadService {
           halign: 'center'
         },
         columnStyles: {
-          0: { cellWidth: 35, halign: 'center' }, // Photo column
-          1: { cellWidth: 25, halign: 'center' }, // Date column
-          2: { cellWidth: 40, halign: 'left' },   // Employee column
-          3: { cellWidth: 40, halign: 'left' },   // Shift column
-          4: { cellWidth: 35, halign: 'left' },   // Location column
-          5: { cellWidth: 25, halign: 'center' }, // Status column
-          6: { cellWidth: 30, halign: 'center' }, // Clock In column
-          7: { cellWidth: 30, halign: 'center' }  // Clock Out column
+          0: { cellWidth: 30, halign: 'center' }, // Date column
+          1: { cellWidth: 50, halign: 'left' },   // Employee column
+          2: { cellWidth: 50, halign: 'left' },   // Shift column
+          3: { cellWidth: 40, halign: 'left' },   // Location column
+          4: { cellWidth: 30, halign: 'center' }, // Status column
+          5: { cellWidth: 35, halign: 'center' }, // Clock In column
+          6: { cellWidth: 35, halign: 'center' }  // Clock Out column
         },
         alternateRowStyles: {
           fillColor: [248, 249, 250]
         },
-        didDrawCell: (data) => {
-          // Add images to the photo column (column 0)
-          if (data.column.index === 0 && data.cell.section === 'body') {
-            const rowIndex = data.row.index;
-            const rowData = tableData[rowIndex];
-            
-            if (rowData && rowData.image) {
-              const cellX = data.cell.x + 2;
-              const cellY = data.cell.y + 2;
-              const imageSize = 31;
-              
-              try {
-                // Add a border around the image
-                doc.setDrawColor(200, 200, 200);
-                doc.setLineWidth(0.5);
-                doc.rect(cellX - 1, cellY - 1, imageSize + 2, imageSize + 2);
-                
-                // Add the image
-                const imageData = rowData.image;
-                if (imageData && imageData.startsWith('data:image/')) {
-                  let format = 'JPEG';
-                  if (imageData.includes('data:image/png')) {
-                    format = 'PNG';
-                  } else if (imageData.includes('data:image/jpeg') || imageData.includes('data:image/jpg')) {
-                    format = 'JPEG';
-                  }
-                  
-                  doc.addImage(imageData, format, cellX, cellY, imageSize, imageSize, undefined, 'FAST');
-                } else {
-                  console.warn(`❌ Invalid image data format for ${rowData.employee}:`, imageData?.substring(0, 100));
-                  throw new Error('Invalid image format');
-                }
-              } catch (error) {
-                console.error(`❌ Error adding image to PDF for ${rowData.employee}:`, error);
-                // Fallback to placeholder
-                doc.setFillColor(240, 240, 240);
-                doc.rect(cellX, cellY, imageSize, imageSize, 'F');
-                doc.setTextColor(150, 150, 150);
-                doc.setFontSize(8);
-                doc.text('Error', cellX + imageSize/2, cellY + imageSize/2 + 3, { align: 'center' });
-              }
-            } else {
-              // Add placeholder for no image
-              const cellX = data.cell.x + 2;
-              const cellY = data.cell.y + 2;
-              const size = 31;
-              
-              doc.setDrawColor(200, 200, 200);
-              doc.setLineWidth(0.5);
-              doc.rect(cellX - 1, cellY - 1, size + 2, size + 2);
-              
-              doc.setFillColor(240, 240, 240);
-              doc.rect(cellX, cellY, size, size, 'F');
-              
-              doc.setTextColor(150, 150, 150);
-              doc.setFontSize(8);
-              doc.text('No Photo', cellX + size/2, cellY + size/2 + 3, { align: 'center' });
-            }
-          }
-        }
+        // No image drawing needed since we removed the Photo column
       });
 
       // Add professional footer

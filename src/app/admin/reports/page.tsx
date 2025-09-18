@@ -219,7 +219,7 @@ export default function ReportsPage() {
           stepIn: att.stepInImage,
           shift: att.shift || att.employeeId?.shift || 'Regular',
           location: att.address || '--',
-          status: att.stepOut ? 'Present' as const : 'Absent' as const,
+          status: att.stepOut ? 'Present' as const : 'Present' as const,
           clockIn: formatISTTime(att.stepIn),
           clockOut: formatISTTime(att.stepOut),
           note: att.note || '',

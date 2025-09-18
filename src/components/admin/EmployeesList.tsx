@@ -188,13 +188,7 @@ export function EmployeesList({ employees, managers, onRefresh }: { employees: E
               <CardHeader className="flex flex-row items-start justify-between gap-2">
                 <div className="flex items-center gap-3 min-w-0">
                   <div 
-                    className="cursor-pointer h-12 w-12 rounded-full overflow-hidden relative"
-                    onClick={() => {
-                      const img = getImageUrl(employee);
-                      if (img) {
-                        setPreviewImage(img);
-                      }
-                    }}
+                    className="h-12 w-12 rounded-full overflow-hidden relative"
                   >
                     <ResponsiveEmployeeImage employee={employee} />
                   </div>
@@ -324,13 +318,7 @@ export function EmployeesList({ employees, managers, onRefresh }: { employees: E
               <TableRow key={employee.id}>
                 <TableCell>
                   <div 
-                    className="cursor-pointer h-10 w-10 rounded-full overflow-hidden"
-                    onClick={() => {
-                      const img = getImageUrl(employee);
-                      if (img) {
-                        setPreviewImage(img);
-                      }
-                    }}
+                    className="h-10 w-10 rounded-full overflow-hidden"
                   >
                     <ResponsiveEmployeeImage employee={employee} />
                   </div>
