@@ -40,8 +40,25 @@ export const fetchEmployees = createAsyncThunk<Employee[]>(
   async (_, thunkAPI) => {
     try {
       const res: any = await getEmployees();
-      // Normalize if needed
-      return (res.data || []) as Employee[];
+      console.log('🔍 API Response for employees:', res);
+      console.log('🔍 Response type:', typeof res);
+      console.log('🔍 Is array:', Array.isArray(res));
+      
+      // Handle different response formats
+      let employees: Employee[] = [];
+      if (Array.isArray(res)) {
+        employees = res as Employee[];
+      } else if (res.data && Array.isArray(res.data)) {
+        employees = res.data as Employee[];
+      } else if (res.employees && Array.isArray(res.employees)) {
+        employees = res.employees as Employee[];
+      } else {
+        console.warn('Unexpected API response format:', res);
+        employees = [];
+      }
+      
+      console.log('🔍 Final employees array length:', employees.length);
+      return employees;
     } catch (err: any) {
       return thunkAPI.rejectWithValue(err.message || 'Error');
     }
