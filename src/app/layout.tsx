@@ -34,6 +34,7 @@ export default function RootLayout({
           fontBody.variable,
           fontHeadline.variable
         )}
+        suppressHydrationWarning
       >
         <StoreProvider>
           {children}

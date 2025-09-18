@@ -27,7 +27,7 @@ export default function ManagerLayout({ children }: { children: ReactNode }) {
 
   if (checking || !isAuthed) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
+      <div className="flex justify-center items-center min-h-screen" suppressHydrationWarning>
         <span className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></span>
       </div>
     );

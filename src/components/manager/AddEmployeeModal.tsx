@@ -294,7 +294,7 @@ export function AddEmployeeModal() {
       console.log('=== FORM DATA DEBUG ===');
       console.log('Manager ID:', managerId);
       console.log('Manager Token:', managerToken ? 'Present' : 'Missing');
-      console.log('API URL:', `${getApiUrl()}/employee`);
+      console.log('API URL:', `${getApiUrl()}/employee/manager`);
       console.log('FormData contents:');
       for (let [key, value] of formData.entries()) {
         if (value instanceof File) {
@@ -322,13 +322,13 @@ export function AddEmployeeModal() {
       
       try {
         console.log('=== REQUEST DEBUG ===');
-        console.log('Request URL:', `${getApiUrl()}/employee`);
+        console.log('Request URL:', `${getApiUrl()}/employee/manager`);
         console.log('Request method: POST');
         console.log('Authorization header present:', !!managerToken);
         console.log('FormData entries count:', Array.from(formData.entries()).length);
         console.log('=== END REQUEST DEBUG ===');
         
-        const response = await fetch(`${getApiUrl()}/employee`, {
+        const response = await fetch(`${getApiUrl()}/employee/manager`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${managerToken}`
