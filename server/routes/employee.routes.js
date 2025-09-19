@@ -43,6 +43,6 @@ router.put("/:id", authenticateUser, upload.single("image"), updateEmployee);
 
 router.delete("/:id",authenticateUser,deleteEmployee)
 router.get("/all",authenticateUser,getEmployees)
-router.post("/manager",authenticateUser,createEmployeeByManager)
+router.post("/manager",authenticateUser,upload.single("image"),createEmployeeByManager)
 
 export default router;

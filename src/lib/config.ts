@@ -1,15 +1,15 @@
 // Manual switch: set to true for local development, false for production
-const USE_LOCAL_BACKEND = false;
+const USE_LOCAL_BACKEND = true;
 
 // API Configuration
 export const API_CONFIG = {
   // Use manual switch to determine base URL
   BASE_URL: USE_LOCAL_BACKEND 
-    ? 'http://192.168.0.69:9002/api'  // Local development
+    ? 'http://localhost:5678/api'  // Local development
     : 'https://api.drenterprise.it/api',  // Production
   
   // Alternative URLs for different environments
-  LOCAL_URL: 'http://192.168.0.69:9002/api',
+  LOCAL_URL: 'http://localhost:5678/api',
   PRODUCTION_URL: 'https://api.drenterprise.it/api',
   STAGING_URL: 'https://apidrenterprice.cravorasolutions.com/api',
   

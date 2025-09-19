@@ -264,44 +264,62 @@ export function AddEmployeeModal() {
         return;
       }
       
-      // Create FormData for image upload
-      const formData = new FormData();
-      if (photoDataUri) {
-        const timestamp = Date.now();
-        const filename = `employee_${timestamp}.jpg`;
-        const imageFile = dataURItoFile(photoDataUri, filename);
-        console.log('Image file being uploaded:', imageFile);
-        formData.append('image', imageFile);
-      }
-      // Add all required fields
-      formData.append('name', form.name.trim());
-      formData.append('email', form.email.trim());
-      formData.append('shift', backendShift);
-      formData.append('address', form.address.trim());
-      formData.append('mobile', form.mobile.trim());
-      formData.append('managerId', managerId);
-      formData.append('createdBy', managerId); // Manager ID as createdBy
-      formData.append('isCreatedByAdmin', 'false'); // Manager creates employee
-      
-      // Add optional fields with defaults if empty
-      if (!form.email.trim()) {
-        formData.append('email', '');
-      }
-      if (!form.mobile.trim()) {
-        formData.append('mobile', '');
+      // Try FormData first, fallback to JSON if it fails
+      let useFormData = true;
+      let formData: FormData | null = null;
+      let jsonData: any = null;
+
+      if (useFormData) {
+        // Create FormData for image upload
+        formData = new FormData();
+        if (photoDataUri) {
+          const timestamp = Date.now();
+          const filename = `employee_${timestamp}.jpg`;
+          const imageFile = dataURItoFile(photoDataUri, filename);
+          console.log('Image file being uploaded:', imageFile);
+          formData.append('image', imageFile);
+        }
+        // Add all required fields
+        formData.append('name', form.name.trim());
+        formData.append('email', form.email.trim() || '');
+        formData.append('shift', backendShift);
+        formData.append('address', form.address.trim());
+        formData.append('mobile', form.mobile.trim() || '');
+        formData.append('managerId', managerId);
+        formData.append('createdBy', managerId);
+        formData.append('isCreatedByAdmin', 'false');
+      } else {
+        // Fallback JSON data (without image)
+        jsonData = {
+          name: form.name.trim(),
+          email: form.email.trim() || '',
+          shift: backendShift,
+          address: form.address.trim(),
+          mobile: form.mobile.trim() || '',
+          managerId: managerId,
+          createdBy: managerId,
+          isCreatedByAdmin: false
+        };
       }
 
-      console.log('=== FORM DATA DEBUG ===');
+      console.log('=== REQUEST DEBUG ===');
       console.log('Manager ID:', managerId);
+      console.log('Manager ID type:', typeof managerId);
       console.log('Manager Token:', managerToken ? 'Present' : 'Missing');
       console.log('API URL:', `${getApiUrl()}/employee/manager`);
-      console.log('FormData contents:');
-      for (let [key, value] of formData.entries()) {
-        if (value instanceof File) {
-          console.log(key, 'File:', value.name, 'Size:', value.size, 'Type:', value.type);
-        } else {
-          console.log(key, value);
+      console.log('Using FormData:', useFormData);
+      
+      if (useFormData && formData) {
+        console.log('FormData contents:');
+        for (let [key, value] of formData.entries()) {
+          if (value instanceof File) {
+            console.log(key, 'File:', value.name, 'Size:', value.size, 'Type:', value.type);
+          } else {
+            console.log(key, value, '(type:', typeof value, ')');
+          }
         }
+      } else if (jsonData) {
+        console.log('JSON data:', jsonData);
       }
       
       // Additional validation checks
@@ -316,7 +334,7 @@ export function AddEmployeeModal() {
       
       console.log('=== END FORM DATA DEBUG ===');
 
-      // Use the API function that handles FormData
+      // Use FormData for proper image upload
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
       
@@ -325,18 +343,31 @@ export function AddEmployeeModal() {
         console.log('Request URL:', `${getApiUrl()}/employee/manager`);
         console.log('Request method: POST');
         console.log('Authorization header present:', !!managerToken);
-        console.log('FormData entries count:', Array.from(formData.entries()).length);
+        if (useFormData && formData) {
+          console.log('FormData entries count:', Array.from(formData.entries()).length);
+        }
         console.log('=== END REQUEST DEBUG ===');
         
-        const response = await fetch(`${getApiUrl()}/employee/manager`, {
+        const requestOptions: RequestInit = {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${managerToken}`
-            // Don't set Content-Type for FormData - browser will set it automatically
           },
-          body: formData,
           signal: controller.signal
-        });
+        };
+
+        if (useFormData && formData) {
+          // Don't set Content-Type for FormData - browser will set it automatically
+          requestOptions.body = formData;
+        } else if (jsonData) {
+          requestOptions.headers = {
+            ...requestOptions.headers,
+            'Content-Type': 'application/json'
+          };
+          requestOptions.body = JSON.stringify(jsonData);
+        }
+        
+        const response = await fetch(`${getApiUrl()}/employee/manager`, requestOptions);
         
                 clearTimeout(timeoutId);
 
@@ -344,12 +375,62 @@ export function AddEmployeeModal() {
         console.log('Response headers:', response.headers);
 
         if (!response.ok) {
+          // If FormData failed and we haven't tried JSON yet, try JSON fallback
+          if (useFormData && response.status === 500) {
+            console.log('🔄 FormData failed, trying JSON fallback...');
+            useFormData = false;
+            
+            // Create JSON data without image
+            jsonData = {
+              name: form.name.trim(),
+              email: form.email.trim() || '',
+              shift: backendShift,
+              address: form.address.trim(),
+              mobile: form.mobile.trim() || '',
+              managerId: managerId,
+              createdBy: managerId,
+              isCreatedByAdmin: false
+            };
+            
+            console.log('🔄 Retrying with JSON data:', jsonData);
+            
+            // Retry with JSON
+            const retryResponse = await fetch(`${getApiUrl()}/employee/manager`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${managerToken}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(jsonData),
+              signal: controller.signal
+            });
+            
+            if (retryResponse.ok) {
+              const result = await retryResponse.json();
+              console.log('✅ JSON fallback successful:', result);
+              
+              toast({
+                title: "Success!",
+                description: "New employee has been added (without photo).",
+              });
+              setIsOpen(false);
+              resetState();
+              window.location.reload();
+              return;
+            } else {
+              console.log('❌ JSON fallback also failed');
+            }
+          }
+          
           let errorMessage = `Failed to add employee. Status: ${response.status}`;
           
           try {
             const errorData = await response.json();
+            console.error('=== SERVER ERROR DEBUG ===');
             console.error('Server error response:', errorData);
             console.error('Error object details:', JSON.stringify(errorData.error, null, 2));
+            console.error('Full error data:', JSON.stringify(errorData, null, 2));
+            console.error('=== END SERVER ERROR DEBUG ===');
             
             if (errorData && errorData.message) {
               errorMessage = errorData.message;
@@ -363,6 +444,8 @@ export function AddEmployeeModal() {
                   errorMessage = errorObj.details;
                 } else if (errorObj.reason) {
                   errorMessage = errorObj.reason;
+                } else if (errorObj.name) {
+                  errorMessage = `${errorObj.name}: ${errorObj.message || 'Validation error'}`;
                 } else {
                   errorMessage = JSON.stringify(errorObj);
                 }

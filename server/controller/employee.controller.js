@@ -196,10 +196,28 @@ export const createEmployeeByManager = async (req, res) => {
         if (!name || !address || !shift) {
             return res.status(400).json({ message: "All fields are required" });
         }
+        
+        // If an image was uploaded, save its filename or path
+        let image = "";
+        if (req.file) {
+            image = req.file.filename; // or `${req.protocol}://${req.get("host")}/upload/${req.file.filename}` for full URL
+            console.log('[CREATE EMPLOYEE BY MANAGER] Image uploaded:', image);
+        }
+        
         const managerId = user.id;
         const createdBy = user.id;
         const isCreatedByAdmin = false;
-        const newEmployee = new Employee({ email, name, mobile, address, managerId, shift, createdBy, isCreatedByAdmin });
+        const newEmployee = new Employee({ 
+            email, 
+            name, 
+            mobile, 
+            address, 
+            managerId, 
+            shift, 
+            createdBy, 
+            isCreatedByAdmin,
+            image // optional image field
+        });
         await newEmployee.save();
         res.status(201).json({ message: "Employee created successfully", employee: newEmployee });
     } catch (error) {
