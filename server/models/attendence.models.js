@@ -16,7 +16,8 @@ const attendanceSchema = new Schema({
     required: true
   },
   stepOut: {
-    type: Date
+    type: Date,
+    default: null
   },
   totalTime: {
     type: Number // in minutes or seconds, as you prefer
@@ -27,6 +28,25 @@ const attendanceSchema = new Schema({
   stepOutImage: {
     type: String // URL or base64 string
   },
+  stepInLongitude: {
+    type: Number
+  },
+  stepInLatitude: {
+    type: Number
+  },
+  stepInAddress: {
+    type: String
+  },
+  stepOutLongitude: {
+    type: Number
+  },
+  stepOutLatitude: {
+    type: Number
+  },
+  stepOutAddress: {
+    type: String
+  },
+  // Keep legacy fields for backward compatibility
   longitude: {
     type: Number
   },

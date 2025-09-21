@@ -1,5 +1,7 @@
 import Attendance from "../models/attendence.models.js";
 import Employee from "../models/employee.models.js";
+import Admin from "../models/admin.models.js";
+import { getCurrentISTTime, getHoursAgoInIST, formatAttendanceForAPI } from "../utils/timeUtils.js";
 
 
 
@@ -7,18 +9,54 @@ import Employee from "../models/employee.models.js";
 const DEFAULT_SHIFT_TIMES = {
   morning: { 
     stepIn: "07:00", 
-    stepOut: "15:00",
+    stepOut: "15:00", // 3:00 PM
     label: "7 AM - 3 PM (Morning)"
   },
   evening: { 
-    stepIn: "14:00", 
-    stepOut: "22:00",
-    label: "2 PM - 10 PM (Evening)"
+    stepIn: "15:00", // 3:00 PM
+    stepOut: "23:00", // 11:00 PM
+    label: "3 PM - 11 PM (Evening)"
   },
   night: { 
-    stepIn: "22:00", 
-    stepOut: "07:00",
-    label: "10 PM - 7 AM (Night)"
+    stepIn: "23:00", // 11:00 PM
+    stepOut: "07:00", // 7:00 AM (next day)
+    label: "11 PM - 7 AM (Night)"
+  }
+};
+
+// Function to auto-detect shift based on clock-in time
+const getShiftFromTime = (clockInTime) => {
+  const hour = clockInTime.getHours();
+  
+  if (hour >= 7 && hour < 15) { // 7:00 AM to 2:59 PM
+    return 'morning';
+  } else if (hour >= 15 && hour < 23) { // 3:00 PM to 10:59 PM
+    return 'evening';
+  } else { // 11:00 PM to 6:59 AM
+    return 'night';
+  }
+};
+
+// Function to get shift end time based on shift type
+const getShiftEndTime = (clockInTime, shift) => {
+  const clockInDate = new Date(clockInTime);
+  const year = clockInDate.getFullYear();
+  const month = clockInDate.getMonth();
+  const date = clockInDate.getDate();
+  
+  switch (shift) {
+    case 'morning':
+      // Morning shift ends at 3:00 PM same day
+      return new Date(year, month, date, 15, 0, 0);
+    case 'evening':
+      // Evening shift ends at 11:00 PM same day
+      return new Date(year, month, date, 23, 0, 0);
+    case 'night':
+      // Night shift ends at 7:00 AM next day
+      return new Date(year, month, date + 1, 7, 0, 0);
+    default:
+      // Default to 8 hours from clock-in
+      return new Date(clockInTime.getTime() + 8 * 60 * 60 * 1000);
   }
 };
 
@@ -27,7 +65,7 @@ const DEFAULT_SHIFT_TIMES = {
 export const markStepIn = async (req, res) => {
   try {
     // console.log("[DEBUG] markStepIn request body:", req.body);
-    const { employeeId, managerId, longitude, latitude, address, note,shift } = req.body;
+    const { employeeId, managerId, longitude, latitude, address, note } = req.body;
 
     // Check if there is already an open attendance for this employee
     const openAttendance = await Attendance.findOne({ employeeId, stepOut: { $exists: false } });
@@ -35,24 +73,37 @@ export const markStepIn = async (req, res) => {
       return res.status(400).json({ message: "Already stepped in. Please step out before stepping in again." });
     }
 
-   const stepIn = new Date(Date.now() + (5.5 * 60 * 60 * 1000)); // IST time
+    const stepIn = getCurrentISTTime();
     const stepInImage = req.file ? req.file.filename : null;
+    
+    // Auto-detect shift based on clock-in time
+    const detectedShift = getShiftFromTime(stepIn);
+    console.log(`Auto-detected shift: ${detectedShift} for clock-in time: ${stepIn.toLocaleString()}`);
 
     const attendance = new Attendance({
       employeeId,
       managerId,
       stepIn,
       stepInImage,
+      stepInLongitude: longitude,
+      stepInLatitude: latitude,
+      stepInAddress: address,
+      // Keep legacy fields for backward compatibility
       longitude,
       latitude,
       address,
       note,
-shift
+      shift: detectedShift // Use auto-detected shift
     });
 
     await attendance.save();
     await Employee.findByIdAndUpdate(employeeId, { isWorking: true });
-    res.status(201).json({ message: "Step In marked", attendance });
+    res.status(201).json({ 
+      message: "Step In marked", 
+      attendance: formatAttendanceForAPI(attendance),
+      detectedShift: detectedShift,
+      shiftEndTime: getShiftEndTime(stepIn, detectedShift)
+    });
   } catch (error) {
     console.error("Error marking step in:", error);
     res.status(500).json({ message: "Error marking step in", error });
@@ -208,7 +259,7 @@ export const markStepOut = async (req, res) => {
       return res.status(400).json({ message: "attendanceId is required" });
     }
     const { attendanceId, longitude, latitude, address, note } = req.body;
-    const stepOut = new Date(Date.now() + (5.5 * 60 * 60 * 1000)); // IST time
+    const stepOut = getCurrentISTTime();
     const stepOutImage = req.file ? req.file.filename : null; // Save only the filename
 
     const attendance = await Attendance.findById(attendanceId);
@@ -220,6 +271,10 @@ export const markStepOut = async (req, res) => {
 
     attendance.stepOut = stepOut;
     attendance.stepOutImage = stepOutImage;
+    attendance.stepOutLongitude = longitude;
+    attendance.stepOutLatitude = latitude;
+    attendance.stepOutAddress = address;
+    // Keep legacy fields for backward compatibility
     attendance.longitude = longitude;
     attendance.latitude = latitude;
     attendance.address = address;
@@ -229,7 +284,7 @@ export const markStepOut = async (req, res) => {
     await attendance.save();
      await Employee.findByIdAndUpdate(attendance.employeeId, { isWorking: false });
     
-    res.status(200).json({ message: "Step Out marked", attendance });
+    res.status(200).json({ message: "Step Out marked", attendance: formatAttendanceForAPI(attendance) });
   } catch (error) {
     console.error("Error marking step out:", error);
     res.status(500).json({ message: "Error marking step out", error });
@@ -300,6 +355,133 @@ export const getAllAttendance = async (req, res) => {
   } catch (error) {
     console.error("Error fetching all attendance:", error);
     res.status(500).json({ message: "Error fetching all attendance", error });
+  }
+};
+
+// Bulk step-in for all employees (Admin only - mohit123456rathod@gmail.com)
+export const bulkStepIn = async (req, res) => {
+  try {
+    // Check if the request is from the authorized admin
+    const adminEmail = req.body.adminEmail || req.headers['admin-email'];
+    
+    if (adminEmail !== 'mohit123456rathod@gmail.com') {
+      return res.status(403).json({ 
+        message: "Access denied. Only authorized admin can perform bulk step-in." 
+      });
+    }
+
+    // Get admin details
+    const admin = await Admin.findOne({ email: adminEmail });
+    if (!admin) {
+      return res.status(404).json({ message: "Admin not found" });
+    }
+
+    const { shift, longitude, latitude, address, note } = req.body;
+    const stepInImage = req.file ? req.file.filename : null;
+
+    if (!shift) {
+      return res.status(400).json({ message: "Shift is required" });
+    }
+
+    // Validate shift
+    if (!['morning', 'evening', 'night'].includes(shift)) {
+      return res.status(400).json({ message: "Invalid shift. Must be morning, evening, or night" });
+    }
+
+    const stepIn = getCurrentISTTime();
+    
+    // Get all employees for this admin
+    const employees = await Employee.find({ 
+      shift: shift,
+      isWorking: false // Only employees who are not currently working
+    });
+
+    if (employees.length === 0) {
+      return res.status(404).json({ message: "No available employees found for bulk step-in" });
+    }
+
+    const results = {
+      success: [],
+      failed: [],
+      alreadyWorking: []
+    };
+
+    // Process each employee
+    for (const employee of employees) {
+      try {
+        // Check if employee is already clocked in
+        const existingAttendance = await Attendance.findOne({ 
+          employeeId: employee._id, 
+          stepOut: { $exists: false } 
+        });
+
+        if (existingAttendance) {
+          results.alreadyWorking.push({
+            employeeId: employee._id,
+            employeeName: employee.name,
+            reason: "Already clocked in"
+          });
+          continue;
+        }
+
+        // Create attendance record
+        const attendance = new Attendance({
+          employeeId: employee._id,
+          managerId: admin._id, // Use admin as manager for bulk operations
+          stepIn,
+          stepInImage, // Use admin's step-in image for all employees
+          stepInLongitude: longitude || 0,
+          stepInLatitude: latitude || 0,
+          stepInAddress: address || 'Bulk step-in location',
+          // Keep legacy fields for backward compatibility
+          longitude: longitude || 0,
+          latitude: latitude || 0,
+          address: address || 'Bulk step-in location',
+          note: note || `Bulk step-in by admin ${admin.name}`,
+          shift
+        });
+
+        await attendance.save();
+        
+        // Update employee status
+        await Employee.findByIdAndUpdate(employee._id, { isWorking: true });
+
+        results.success.push({
+          employeeId: employee._id,
+          employeeName: employee.name,
+          attendanceId: attendance._id,
+          stepIn: formatAttendanceForAPI(attendance).stepIn
+        });
+
+      } catch (error) {
+        console.error(`Error processing employee ${employee.name}:`, error);
+        results.failed.push({
+          employeeId: employee._id,
+          employeeName: employee.name,
+          error: error.message
+        });
+      }
+    }
+
+    console.log(`Bulk step-in completed by admin ${admin.name}:`);
+    console.log(`- Success: ${results.success.length}`);
+    console.log(`- Failed: ${results.failed.length}`);
+    console.log(`- Already working: ${results.alreadyWorking.length}`);
+
+    res.status(200).json({
+      message: "Bulk step-in completed",
+      results,
+      summary: {
+        totalEmployees: employees.length,
+        successful: results.success.length,
+        failed: results.failed.length,
+        alreadyWorking: results.alreadyWorking.length
+      }
+    });
+
+  } catch (error) {
+    console.error("Error in bulk step-in:", error);
+    res.status(500).json({ message: "Error in bulk step-in", error: error.message });
   }
 };
 

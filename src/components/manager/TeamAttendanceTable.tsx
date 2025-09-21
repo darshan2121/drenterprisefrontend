@@ -98,7 +98,10 @@ export function TeamAttendanceTable({ teamMembers }: { teamMembers: TeamMember[]
       console.log('❌ No image available for:', member.name, '- will use placeholder');
       loggedMembers.current.add(memberKey);
     }
-    return undefined;
+    // Return a placeholder image URL instead of undefined
+    const placeholderUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}&size=40&background=6366f1&color=ffffff&bold=true`;
+    console.log('🎨 Generated placeholder URL for:', member.name, 'URL:', placeholderUrl);
+    return placeholderUrl;
   };
 
   useEffect(() => {
@@ -264,25 +267,28 @@ export function TeamAttendanceTable({ teamMembers }: { teamMembers: TeamMember[]
                     if (img) setPreviewImage(img);
                   }}>
                       <AvatarImage 
-                        src={getBestImageUrl(member) || `https://placehold.co/40x40.png`} 
+                        src={getBestImageUrl(member)} 
+                        alt={`${member.name} avatar`}
                         data-ai-hint="person portrait"
                         onError={(e) => {
                           const imageKey = `desktop-error-${member.id}`;
                           if (!loggedImageEvents.current.has(imageKey)) {
-                            console.log('❌ Desktop manager image failed to load for:', member.name);
+                            console.log('❌ Desktop manager image failed to load for:', member.name, 'URL:', e.currentTarget.src);
                             loggedImageEvents.current.add(imageKey);
                           }
-                          e.currentTarget.src = `https://placehold.co/400x400/6366f1/ffffff?text=${member.name.charAt(0).toUpperCase()}`;
+                          e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}&size=40&background=6366f1&color=ffffff&bold=true`;
                         }}
                         onLoad={() => {
                           const imageKey = `desktop-load-${member.id}`;
                           if (!loggedImageEvents.current.has(imageKey)) {
-                            console.log('✅ Desktop manager image loaded for:', member.name);
+                            console.log('✅ Desktop manager image loaded for:', member.name, 'URL:', e.currentTarget.src);
                             loggedImageEvents.current.add(imageKey);
                           }
                         }}
                       />
-                      <AvatarFallback>{member.name.charAt(0)}</AvatarFallback>
+                      <AvatarFallback className="bg-primary text-primary-foreground font-semibold text-sm">
+                        {member.name.charAt(0).toUpperCase()}
+                      </AvatarFallback>
                   </Avatar>
                   {member.name}
                 </TableCell>

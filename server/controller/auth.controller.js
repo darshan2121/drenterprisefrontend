@@ -1,6 +1,7 @@
 // controllers/authController.js
 import Admin from "../models/admin.models.js";
 import Manager from "../models/manager.models.js";
+import { getCurrentISTTime, getCurrentISTYear, isExpiredInIST } from "../utils/timeUtils.js";
 import nodemailer from "nodemailer";
 import dotenv from "dotenv";
 dotenv.config(); // Ensure this is at the top
@@ -65,7 +66,7 @@ export const forgotPassword = async (req, res) => {
   <hr style="margin: 30px 30px; border: none; border-top: 1px solid #eee;" />
 
   <div style="text-align: center; font-size: 13px; color: #aaa;">
-    &copy; ${new Date().getFullYear()} DREnterprice. All rights reserved.<br />
+    &copy; ${getCurrentISTYear()} DREnterprice. All rights reserved.<br />
   
   </div>
 </div>
@@ -102,7 +103,7 @@ export const verifyOtpAndResetPassword = async (req, res) => {
     const user = await model.findOne({ email, otp });
 
     if (!user) return res.status(400).json({ message: "Invalid OTP or email" });
-    if (user.otpExpires < new Date()) {
+    if (isExpiredInIST(user.otpExpires)) {
       return res.status(400).json({ message: "OTP expired" });
     }
 
