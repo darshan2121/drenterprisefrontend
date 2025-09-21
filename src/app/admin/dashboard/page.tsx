@@ -1,8 +1,9 @@
 "use client";
 
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
-import { Users, UserCog, Briefcase, Activity, ArrowUpRight, UserPlus, FileText as FileTextIcon, CalendarClock, BarChart3, CheckCircle2, UserX, CalendarOff } from "lucide-react";
+import { Users, UserCog, Briefcase, Activity, ArrowUpRight, UserPlus, FileText as FileTextIcon, CalendarClock, BarChart3, CheckCircle2, UserX, CalendarOff, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -15,6 +16,7 @@ import Image from "next/image";
 import { authService } from "@/services/authService";
 import { useNavigation } from "@/hooks/useNavigation";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { BulkStepInModal } from "@/components/admin/BulkStepInModal";
 
 // Function to get time-based greeting
 const getTimeBasedGreeting = (time: Date = new Date()) => {
@@ -72,6 +74,12 @@ const chartConfig = {
 function isAdminAuthenticated() {
   if (typeof window === "undefined") return false;
   return !!localStorage.getItem("adminToken");
+}
+
+function isAuthorizedForBulkStepIn() {
+  if (typeof window === "undefined") return false;
+  const currentUser = authService.getCurrentUser();
+  return currentUser?.email === "mohit123456rathod@gmail.com";
 }
 
 export default function AdminDashboardPage() {
@@ -339,6 +347,27 @@ export default function AdminDashboardPage() {
                   </div>
                 </button>
               ))}
+              
+              {/* Bulk Step-In Button - Only for authorized admin */}
+              {isAuthorizedForBulkStepIn() && (
+                <BulkStepInModal>
+                  <button className="block p-4 rounded-xl transition-all duration-200 hover:scale-[1.02] border text-left w-full bg-orange-50 dark:bg-orange-950 hover:bg-orange-100 dark:hover:bg-orange-900 border-orange-200 dark:border-orange-800">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-shrink-0">
+                        <Clock className="h-6 w-6 text-gray-600 dark:text-gray-400" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
+                          Bulk Step-In
+                        </p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
+                          Clock in all employees for a shift
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                </BulkStepInModal>
+              )}
             </div>
           </div>
         )}

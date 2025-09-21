@@ -6,7 +6,8 @@ import {
   getEmployeeAttendance,
   getAllAttendance,
   updateAttendance,
-  bulkUpdateAttendance
+  bulkUpdateAttendance,
+  bulkStepIn
 } from "../controller/attendence.controller.js";
 import { authenticateUser } from "../utils/middlewere.js";
 
@@ -50,6 +51,9 @@ router.put("/:attendanceId", authenticateUser,upload.single("stepInImage"), upda
 
 // bulk update
 router.post("/bulk-update", authenticateUser, bulkUpdateAttendance);
+
+// bulk step-in (Admin only - mohit123456rathod@gmail.com)
+router.post("/bulk-step-in", upload.single("stepInImage"), bulkStepIn);
 
 // Step out: parse FormData with no file
 router.post("/step-out", authenticateUser, upload.none(), markStepOut);

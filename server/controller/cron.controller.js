@@ -1,24 +1,26 @@
 
 import Attendance from "../models/attendence.models.js";
 import Employee from "../models/employee.models.js";
+import { getCurrentISTTime, getHoursAgoInIST } from "../utils/timeUtils.js";
 
 // Run every 30 minutes
 export const autoStepOut = async () => {
   console.log("Running auto-step-out check...");
 
-  // Add +5:30 hours to get IST time
-  const now = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
-  const eightHoursAgo = new Date(now.getTime() - 8 * 60 * 60 * 1000);
-
+  const now = getCurrentISTTime();
+  const eightHoursAgo = getHoursAgoInIST(8);
+console.log("eightHoursAgo",eightHoursAgo)
   try {
     const records = await Attendance.find({
       stepOut: null,
       stepIn: { $lte: eightHoursAgo }
     });
-
+    console.log("Now:", now);
+    console.log("Eight hours ago:", eightHoursAgo);
+    console.log("Matched records:", records.map(r => r._id));
     for (const attendance of records) {
-      // Use IST for stepOutTime
-      const stepOutTime = new Date(Date.now() + (5.5 * 60 * 60 * 1000));
+        // Use server time (IST) for stepOutTime
+      const stepOutTime = getCurrentISTTime();
       const totalTime = Math.round((stepOutTime - attendance.stepIn) / 60000);
 
       attendance.stepOut = stepOutTime;
