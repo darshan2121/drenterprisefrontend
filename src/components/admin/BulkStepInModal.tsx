@@ -363,7 +363,7 @@ export function BulkStepInModal({ children }: BulkStepInModalProps) {
             </p>
           </div>
 
-          {/* <div className="space-y-2">
+          <div className="space-y-2 hidden md:block">
             <Label htmlFor="note">Note (Optional)</Label>
             <Textarea
               id="note"
@@ -374,7 +374,7 @@ export function BulkStepInModal({ children }: BulkStepInModalProps) {
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 hidden md:block">
             <Label htmlFor="stepInImage" className="flex items-center gap-2">
               <Camera className="h-4 w-4" />
               Step-in Image (Optional)
@@ -391,7 +391,7 @@ export function BulkStepInModal({ children }: BulkStepInModalProps) {
                 Selected: {formData.stepInImage.name}
               </p>
             )}
-          </div> */}
+          </div>
 
           <DialogFooter>
             <Button
