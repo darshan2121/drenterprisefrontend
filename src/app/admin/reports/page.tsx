@@ -155,41 +155,30 @@ export default function ReportsPage() {
           if (!dateString) return '--';
           
           try {
-            // Parse the date string
-            const date = new Date(dateString);
+            // Parse the date string (this is UTC from database)
+            const utcDate = new Date(dateString);
             
             // Check if the date is valid
-            if (isNaN(date.getTime())) {
+            if (isNaN(utcDate.getTime())) {
               console.warn('Invalid date string:', dateString);
               return '--';
             }
             
-            // Extract the time directly from the ISO string to avoid timezone issues
-            // The time sent was in UTC, so we need to extract it properly
-            const timeString = dateString.split('T')[1]; // Get the time part
-            if (timeString) {
-              const timeOnly = timeString.split('.')[0]; // Remove milliseconds
-              const [hours, minutes] = timeOnly.split(':');
-              
-              // Convert to 12-hour format
-              const hour24 = parseInt(hours);
-              const hour12 = hour24 === 0 ? 12 : hour24 > 12 ? hour24 - 12 : hour24;
-              const ampm = hour24 >= 12 ? 'PM' : 'AM';
-              const formattedTime = `${hour12}:${minutes} ${ampm}`;
-              
-              console.log(`Time formatting: ${dateString} -> ${formattedTime} (12-hour format)`);
-              return formattedTime;
-            }
+            // The time was stored as UTC, so we need to convert it back to local time for display
+            // Use the browser's built-in timezone conversion
+            const localTime = new Date(utcDate);
             
-            // Fallback to local time if ISO parsing fails
-            const hours = date.getHours();
-            const minutes = date.getMinutes();
+            // Extract time components (browser automatically converts UTC to local)
+            const hours = localTime.getHours();
+            const minutes = localTime.getMinutes();
+            
+            // Convert to 12-hour format
             const hour12 = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
             const ampm = hours >= 12 ? 'PM' : 'AM';
-            const result = `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+            const formattedTime = `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
             
-            console.log(`Time formatting (fallback): ${dateString} -> ${result} (12-hour format)`);
-            return result;
+            console.log(`Time formatting: ${dateString} (UTC) -> ${formattedTime} (local 12-hour format)`);
+            return formattedTime;
           } catch (error) {
             console.error('Error formatting time:', error, dateString);
             return '--';
@@ -224,6 +213,18 @@ export default function ReportsPage() {
           clockOut: formatISTTime(att.stepOut),
           note: att.note || '',
           totalTime: att.totalTime || '',
+          // Include raw location data for editing
+          _raw: {
+            longitude: att.longitude,
+            latitude: att.latitude,
+            address: att.address,
+            stepInLongitude: att.stepInLongitude,
+            stepInLatitude: att.stepInLatitude,
+            stepInAddress: att.stepInAddress,
+            stepOutLongitude: att.stepOutLongitude,
+            stepOutLatitude: att.stepOutLatitude,
+            stepOutAddress: att.stepOutAddress,
+          }
         };
         
         return formatted;

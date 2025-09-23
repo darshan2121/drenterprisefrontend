@@ -13,9 +13,10 @@ import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { FileDown, RefreshCw, Loader2, Check, CheckCircle, Download } from "lucide-react";
+import { FileDown, RefreshCw, Loader2, Check, CheckCircle, Download, Trash2 } from "lucide-react";
 import { EditReportModal } from "./EditReportModal";
 import { BulkUpdateModal } from "@/components/admin/BulkUpdateModal";
+import { DeleteAttendanceModal } from "./DeleteAttendanceModal";
 import { PDFDownloadButton } from "@/components/ui/pdf-download-button";
 import { pdfDownloadService } from "@/services/pdfDownloadService";
 import jsPDF from "jspdf";
@@ -850,11 +851,33 @@ export function ReportsTable({
       </TableCell>
       <TableCell className="text-right">
         {!disableActions && (
-          <EditReportModal 
-            report={report} 
-            onRefresh={onRefresh}
-            filters={filters}
-          />
+          <div className="flex items-center justify-end gap-2">
+            <EditReportModal 
+              report={report} 
+              onRefresh={onRefresh}
+              filters={filters}
+            />
+            <DeleteAttendanceModal
+              attendanceId={report._id || report.id || ''}
+              employeeName={report.employee}
+              date={report.date}
+              onSuccess={() => {
+                console.log('🔄 Delete success - refreshing table');
+                onRefresh?.();
+              }}
+            >
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </DeleteAttendanceModal>
+          </div>
+        )}
+        {disableActions && (
+          <div className="text-muted-foreground text-sm">Actions disabled</div>
         )}
       </TableCell>
     </TableRow>
@@ -905,11 +928,28 @@ export function ReportsTable({
         <p className="truncate"><strong className="text-muted-foreground">Clock Out:</strong> {report.clockOut}</p>
         <div className="flex flex-col sm:flex-row gap-2 pt-2">
           {!disableActions && (
-            <EditReportModal 
-              report={report} 
-              onRefresh={onRefresh}
-              filters={filters}
-            />
+            <div className="flex gap-2">
+              <EditReportModal 
+                report={report} 
+                onRefresh={onRefresh}
+                filters={filters}
+              />
+              <DeleteAttendanceModal
+                attendanceId={report._id || report.id || ''}
+                employeeName={report.employee}
+                date={report.date}
+                onSuccess={() => onRefresh?.()}
+              >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </Button>
+              </DeleteAttendanceModal>
+            </div>
           )}
         </div>
       </CardContent>
