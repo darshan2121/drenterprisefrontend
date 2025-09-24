@@ -173,7 +173,7 @@ export function BulkStepInModal({ children }: BulkStepInModalProps) {
       formDataToSend.append("longitude", formData.longitude);
       formDataToSend.append("latitude", formData.latitude);
       formDataToSend.append("address", formData.address);
-      formDataToSend.append("note", formData.note || `Bulk step-in for ${formData.shift} shift`);
+      formDataToSend.append("note", formData.note || ``);
       
       if (formData.stepInImage) {
         formDataToSend.append("stepInImage", formData.stepInImage);
