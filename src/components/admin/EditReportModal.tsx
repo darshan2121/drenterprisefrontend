@@ -37,6 +37,18 @@ type Report = {
     _id?: string;
     attendanceId?: string;
     id?: string;
+    // Raw attendance data for location fields
+    _raw?: {
+        longitude?: number;
+        latitude?: number;
+        address?: string;
+        stepInLongitude?: number;
+        stepInLatitude?: number;
+        stepInAddress?: string;
+        stepOutLongitude?: number;
+        stepOutLatitude?: number;
+        stepOutAddress?: string;
+    };
 };
 
 export function EditReportModal({ 
@@ -59,10 +71,52 @@ export function EditReportModal({
   const { toast } = useToast();
   const dispatch = useDispatch();
 
+  // Helper function to convert 12-hour format to 24-hour format for input
+  const convertTo24Hour = (time12h: string): string => {
+    if (!time12h || time12h === '--') return '';
+    
+    try {
+      // Handle formats like "2:10 PM" or "2:10PM"
+      const time = time12h.trim();
+      const [timePart, period] = time.split(/(AM|PM)/i);
+      if (!timePart || !period) return ''; // Return empty if not in expected format
+      
+      const [hours, minutes] = timePart.split(':');
+      let hour24 = parseInt(hours);
+      
+      if (period.toUpperCase() === 'PM' && hour24 !== 12) {
+        hour24 += 12;
+      } else if (period.toUpperCase() === 'AM' && hour24 === 12) {
+        hour24 = 0;
+      }
+      
+      return `${hour24.toString().padStart(2, '0')}:${minutes || '00'}`;
+    } catch (error) {
+      console.error('Error converting time:', time12h, error);
+      return ''; // Return empty if conversion fails
+    }
+  };
+
+  // Helper function to convert 24-hour format to 12-hour format for display
+  const convertTo12Hour = (time24h: string): string => {
+    if (!time24h || time24h === '--') return '--';
+    
+    try {
+      const [hours, minutes] = time24h.split(':');
+      const hour24 = parseInt(hours);
+      const hour12 = hour24 === 0 ? 12 : hour24 > 12 ? hour24 - 12 : hour24;
+      const period = hour24 >= 12 ? 'PM' : 'AM';
+      return `${hour12}:${minutes || '00'} ${period}`;
+    } catch (error) {
+      console.error('Error converting time:', time24h, error);
+      return time24h;
+    }
+  };
+
   const [location, setLocation] = useState(report.location);
   const [shift, setShift] = useState(report.shift);
-  const [clockIn, setClockIn] = useState(report.clockIn);
-  const [clockOut, setClockOut] = useState(report.clockOut);
+  const [clockIn, setClockIn] = useState(convertTo24Hour(report.clockIn));
+  const [clockOut, setClockOut] = useState(convertTo24Hour(report.clockOut));
 
   const handleSaveChanges = async () => {
     setIsLoading(true);
@@ -71,15 +125,118 @@ export function EditReportModal({
       if (!attendanceId) throw new Error('Attendance ID is missing');
       
       // Convert clockIn and clockOut to ISO strings using the report date (local time, no 'Z')
-      const stepIn = clockIn ? new Date(`${report.date}T${clockIn}:00`).toISOString() : undefined;
-      const stepOut = clockOut ? new Date(`${report.date}T${clockOut}:00`).toISOString() : undefined;
+      // Only process valid time values (not "--" or empty strings)
+      const isValidTime = (time: string) => time && time !== '--' && time.trim() !== '' && time.match(/^\d{2}:\d{2}$/);
+      
+      let stepIn: string | undefined = undefined;
+      let stepOut: string | undefined = undefined;
+      
+      if (isValidTime(clockIn)) {
+        try {
+          // Create date in local timezone and store as UTC
+          const stepInDate = new Date(`${report.date}T${clockIn}:00`);
+          if (!isNaN(stepInDate.getTime())) {
+            // Store as UTC (toISOString() automatically converts to UTC)
+            stepIn = stepInDate.toISOString();
+            console.log(`Clock In: ${clockIn} -> ${stepIn} (UTC)`);
+          }
+        } catch (error) {
+          console.error('Error parsing clockIn time:', clockIn, error);
+        }
+      }
+      
+      if (isValidTime(clockOut)) {
+        try {
+          // Create date in local timezone and store as UTC
+          const stepOutDate = new Date(`${report.date}T${clockOut}:00`);
+          if (!isNaN(stepOutDate.getTime())) {
+            // Store as UTC (toISOString() automatically converts to UTC)
+            stepOut = stepOutDate.toISOString();
+            console.log(`Clock Out: ${clockOut} -> ${stepOut} (UTC)`);
+          }
+        } catch (error) {
+          console.error('Error parsing clockOut time:', clockOut, error);
+        }
+      }
 
-      const updateData = {
+      // Prepare location data - use existing coordinates if available, otherwise keep current values
+      const updateData: any = {
         shift,
-        address: location,
+      };
+      
+      // Only include stepIn and stepOut if they have valid values
+      if (stepIn !== undefined) {
+        updateData.stepIn = stepIn;
+      }
+      if (stepOut !== undefined) {
+        updateData.stepOut = stepOut;
+      }
+
+      // If location text has changed, update the address field
+      if (location !== report.location) {
+        updateData.address = location;
+        
+        // If we have existing coordinates, keep them; otherwise they'll remain unchanged
+        if (report._raw?.longitude !== undefined) {
+          updateData.longitude = report._raw.longitude;
+        }
+        if (report._raw?.latitude !== undefined) {
+          updateData.latitude = report._raw.latitude;
+        }
+        
+        // Also update step-specific location fields if they exist
+        if (report._raw?.stepInLongitude !== undefined) {
+          updateData.stepInLongitude = report._raw.stepInLongitude;
+        }
+        if (report._raw?.stepInLatitude !== undefined) {
+          updateData.stepInLatitude = report._raw.stepInLatitude;
+        }
+        if (report._raw?.stepInAddress !== undefined) {
+          updateData.stepInAddress = location; // Update step-in address with new location
+        }
+      }
+
+      console.log('Sending update data:', updateData);
+      // Check for time changes by comparing converted times
+      const originalClockIn24 = convertTo24Hour(report.clockIn);
+      const originalClockOut24 = convertTo24Hour(report.clockOut);
+      const hasClockInChange = clockIn !== originalClockIn24;
+      const hasClockOutChange = clockOut !== originalClockOut24;
+      
+      console.log('Validation check:', {
+        originalShift: report.shift,
+        newShift: shift,
+        hasShiftChange: shift !== report.shift,
+        originalClockIn: report.clockIn,
+        originalClockIn24,
+        newClockIn: clockIn,
+        hasClockInChange,
+        originalClockOut: report.clockOut,
+        originalClockOut24,
+        newClockOut: clockOut,
+        hasClockOutChange,
+        hasTimeChanges: stepIn !== undefined || stepOut !== undefined,
+        hasLocationChanges: location !== report.location,
         stepIn,
         stepOut,
-      };
+        originalLocation: report.location,
+        newLocation: location
+      });
+
+      // Validate that we have at least some meaningful changes to update
+      // Check if shift has actually changed or if we have other valid updates
+      const hasShiftChange = shift !== report.shift;
+      const hasTimeChanges = stepIn !== undefined || stepOut !== undefined;
+      const hasLocationChanges = location !== report.location;
+      
+      if (!hasShiftChange && !hasTimeChanges && !hasLocationChanges) {
+        toast({
+          title: "No Changes",
+          description: "Please make some changes before saving.",
+          variant: "destructive",
+        });
+        return;
+      }
 
       await dispatch(updateAttendanceRecord({ id: attendanceId, data: updateData }) as any);
       
@@ -91,6 +248,7 @@ export function EditReportModal({
       });
       setIsOpen(false);
     } catch (error: any) {
+      console.error('Error updating attendance:', error);
       toast({
         title: "Error",
         description: error?.response?.data?.message || error.message || "Failed to update report.",
@@ -105,8 +263,8 @@ export function EditReportModal({
     if (open) {
         setLocation(report.location);
         setShift(report.shift);
-        setClockIn(report.clockIn);
-        setClockOut(report.clockOut);
+        setClockIn(convertTo24Hour(report.clockIn));
+        setClockOut(convertTo24Hour(report.clockOut));
     }
     setIsOpen(open);
   }
@@ -144,6 +302,7 @@ export function EditReportModal({
             <Label htmlFor="clockIn" className="text-right">Clock In</Label>
             <Input 
                 id="clockIn" 
+                type="time"
                 value={clockIn} 
                 onChange={(e) => setClockIn(e.target.value)} 
                 className="col-span-3" 
@@ -155,6 +314,7 @@ export function EditReportModal({
             <Label htmlFor="clockOut" className="text-right">Clock Out</Label>
             <Input 
                 id="clockOut" 
+                type="time"
                 value={clockOut} 
                 onChange={(e) => setClockOut(e.target.value)} 
                 className="col-span-3" 

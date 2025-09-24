@@ -8,16 +8,32 @@ const JWT_SECRET = process.env.JWT_SECRET;
 
 export const createManager = async (req, res) => {
   try {
-    const { email, password, name, mobile, address,adminId } = req.body;
+    const { email, password, name, mobile, address, adminId } = req.body;
+    console.log('📝 [createManager] Request body:', req.body);
+    
     if(!adminId || !email || !password || !name || !mobile || !address){
-      res.status(400).json({message:"All fields are required"})
+      console.log('❌ [createManager] Missing required fields:', { adminId, email, password, name, mobile, address });
+      return res.status(400).json({message:"All fields are required"});
     }
 
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const newManager = new Manager({ email, password: hashedPassword, name, mobile, address, createdBy:adminId });
+    const newManager = new Manager({ 
+      email, 
+      password: hashedPassword, 
+      name, 
+      mobile, 
+      address, 
+      createdBy: adminId,
+      userType: 'manager',
+      isActive: true
+    });
+    
+    console.log('💾 [createManager] Saving manager:', newManager);
     await newManager.save();
+    console.log('✅ [createManager] Manager saved successfully:', newManager._id);
+    
     res.status(201).json({ message: "Manager created successfully", manager: newManager });
   } catch (error) {
     if (error.code === 11000) {

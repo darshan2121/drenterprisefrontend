@@ -92,8 +92,11 @@ export const loginAdmin = (body: { email: string; password: string }) =>
 export const getManagers = () =>
   http(ENDPOINTS.manager.all);
 
-export const addManager = (body: any) =>
-  http(ENDPOINTS.manager.add, { method: "POST", body: JSON.stringify(body) });
+export const addManager = (body: any) => {
+  console.log('🌐 [API] addManager called with body:', body);
+  console.log('🌐 [API] addManager endpoint:', ENDPOINTS.manager.add);
+  return http(ENDPOINTS.manager.add, { method: "POST", body: JSON.stringify(body) });
+};
 
 export const updateManager = (id: string, body: any) =>
   http(ENDPOINTS.manager.single(id), { method: "PUT", body: JSON.stringify(body) });
@@ -127,6 +130,9 @@ export const clockOutAttendance = (formData: FormData) =>
 // Add new attendance API functions
 export const updateAttendance = (id: string, body: any) =>
   http(ENDPOINTS.attendance.single(id), { method: "PUT", body: JSON.stringify(body) });
+
+export const deleteAttendance = (id: string) =>
+  http(ENDPOINTS.attendance.single(id), { method: "DELETE" });
 
 export const getAttendanceByEmployee = (employeeId: string) =>
   http(ENDPOINTS.attendance.byEmployee(employeeId));

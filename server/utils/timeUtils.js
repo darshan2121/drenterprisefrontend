@@ -7,10 +7,9 @@
  * @returns {Date} Current date and time in IST
  */
 export const getCurrentISTTime = () => {
-  const now = new Date();
-  // Get IST time by adding 5.5 hours to UTC
-  const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC+5:30
-  return new Date(now.getTime() + istOffset);
+  // Return current UTC time - let the frontend handle timezone conversion
+  // This prevents double timezone conversion issues
+  return new Date();
 };
 
 /**
@@ -74,17 +73,19 @@ export const formatAttendanceForAPI = (attendance) => {
   
   const formatted = { ...attendance.toObject ? attendance.toObject() : attendance };
   
+  // Return dates as ISO strings without additional timezone conversion
+  // Let the frontend handle timezone display
   if (formatted.stepIn) {
-    formatted.stepIn = formatDateForAPI(new Date(formatted.stepIn));
+    formatted.stepIn = new Date(formatted.stepIn).toISOString();
   }
   if (formatted.stepOut) {
-    formatted.stepOut = formatDateForAPI(new Date(formatted.stepOut));
+    formatted.stepOut = new Date(formatted.stepOut).toISOString();
   }
   if (formatted.createdAt) {
-    formatted.createdAt = formatDateForAPI(new Date(formatted.createdAt));
+    formatted.createdAt = new Date(formatted.createdAt).toISOString();
   }
   if (formatted.updatedAt) {
-    formatted.updatedAt = formatDateForAPI(new Date(formatted.updatedAt));
+    formatted.updatedAt = new Date(formatted.updatedAt).toISOString();
   }
   
   return formatted;

@@ -186,10 +186,20 @@ export function AddManagerModal() {
   };
 
   const handleSaveChanges = async () => {
-    if (!validateForm()) return;
+    console.log('🔍 [AddManagerModal] Starting handleSaveChanges');
+    console.log('🔍 [AddManagerModal] Form data:', form);
+    console.log('🔍 [AddManagerModal] isActive:', isActive);
+    
+    if (!validateForm()) {
+      console.log('❌ [AddManagerModal] Form validation failed');
+      return;
+    }
     
     const currentAdmin = authService.getCurrentUser();
+    console.log('🔍 [AddManagerModal] Current admin:', currentAdmin);
+    
     if (!currentAdmin?.id) {
+      console.log('❌ [AddManagerModal] No current admin found');
       toast({
         title: "Error",
         description: "Unable to identify current admin. Please log in again.",
@@ -218,7 +228,9 @@ export function AddManagerModal() {
     console.log('🔄 [AddManagerModal] status value:', isActive ? "Active" : "Inactive");
     
     try {
-      await dispatch(createManager(managerData) as any);
+      console.log('🚀 [AddManagerModal] Dispatching createManager with data:', managerData);
+      const result = await dispatch(createManager(managerData) as any);
+      console.log('✅ [AddManagerModal] createManager result:', result);
       
       toast({
         title: "Success!",
@@ -236,6 +248,13 @@ export function AddManagerModal() {
       });
       setIsActive(true);
     } catch (error: any) {
+      console.error('❌ [AddManagerModal] Error creating manager:', error);
+      console.error('❌ [AddManagerModal] Error details:', {
+        message: error.message,
+        payload: error.payload,
+        type: error.type
+      });
+      
       toast({
         title: "Error",
         description: error.message || "Something went wrong.",

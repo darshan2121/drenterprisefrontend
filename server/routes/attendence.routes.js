@@ -7,7 +7,8 @@ import {
   getAllAttendance,
   updateAttendance,
   bulkUpdateAttendance,
-  bulkStepIn
+  bulkStepIn,
+  deleteAttendance
 } from "../controller/attendence.controller.js";
 import { authenticateUser } from "../utils/middlewere.js";
 
@@ -48,6 +49,9 @@ router.post("/step-in", authenticateUser,upload.single("stepInImage"), markStepI
 
 // Update attendance by attendance ID (supports all fields including stepOut)
 router.put("/:attendanceId", authenticateUser,upload.single("stepInImage"), updateAttendance);
+
+// Delete attendance by attendance ID
+router.delete("/:attendanceId", authenticateUser, deleteAttendance);
 
 // bulk update
 router.post("/bulk-update", authenticateUser, bulkUpdateAttendance);

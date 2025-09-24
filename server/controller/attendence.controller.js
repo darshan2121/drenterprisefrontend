@@ -125,6 +125,13 @@ export const updateAttendance = async (req, res) => {
       managerId,
       stepIn,
       shift,
+      // Step-specific location fields
+      stepInLongitude,
+      stepInLatitude,
+      stepInAddress,
+      stepOutLongitude,
+      stepOutLatitude,
+      stepOutAddress,
     } = req.body;
 
     // Find the attendance record
@@ -136,15 +143,25 @@ export const updateAttendance = async (req, res) => {
     // Prepare update data
     const updateData = {};
     
+    // Legacy location fields (for backward compatibility)
     if (longitude !== undefined) updateData.longitude = longitude;
     if (latitude !== undefined) updateData.latitude = latitude;
     if (address !== undefined) updateData.address = address;
+    
+    // Step-specific location fields
+    if (stepInLongitude !== undefined) updateData.stepInLongitude = stepInLongitude;
+    if (stepInLatitude !== undefined) updateData.stepInLatitude = stepInLatitude;
+    if (stepInAddress !== undefined) updateData.stepInAddress = stepInAddress;
+    if (stepOutLongitude !== undefined) updateData.stepOutLongitude = stepOutLongitude;
+    if (stepOutLatitude !== undefined) updateData.stepOutLatitude = stepOutLatitude;
+    if (stepOutAddress !== undefined) updateData.stepOutAddress = stepOutAddress;
+    
     if (note !== undefined) updateData.note = note;
     if (employeeId !== undefined) updateData.employeeId = employeeId;
     if (managerId !== undefined) updateData.managerId = managerId;
     if (stepIn !== undefined) updateData.stepIn = new Date(stepIn);
     if (totalTime !== undefined) updateData.totalTime = totalTime;
-     if (shift !== undefined) updateData.shift = shift;
+    if (shift !== undefined) updateData.shift = shift;
 
     // Handle stepOut update
     if (stepOut !== undefined) {
@@ -200,6 +217,17 @@ export const bulkUpdateAttendance = async (req, res) => {
   try {
     const { attendanceIds, stepIn, stepOut, shift } = req.body;
 
+    console.log('Bulk update received:', { 
+      attendanceIds: attendanceIds?.length, 
+      stepIn, 
+      stepOut, 
+      shift,
+      stepInType: typeof stepIn,
+      stepOutType: typeof stepOut,
+      stepInIsNull: stepIn === null,
+      stepOutIsNull: stepOut === null
+    });
+
     // Validate input
     if (!attendanceIds || !Array.isArray(attendanceIds)) {
       return res.status(400).json({ message: "attendanceIds must be an array" });
@@ -211,15 +239,24 @@ export const bulkUpdateAttendance = async (req, res) => {
 
     // Prepare update data
     const updateData = {};
-    if (stepIn !== undefined) updateData.stepIn = new Date(stepIn);
-    if (stepOut !== undefined) updateData.stepOut = new Date(stepOut);
+    if (stepIn !== undefined) {
+      updateData.stepIn = stepIn === null ? null : new Date(stepIn);
+    }
+    if (stepOut !== undefined) {
+      updateData.stepOut = stepOut === null ? null : new Date(stepOut);
+    }
     if (shift !== undefined) updateData.shift = shift;
 
-    // If both stepIn and stepOut are provided, calculate totalTime
-    if (stepIn !== undefined && stepOut !== undefined) {
+    console.log('Bulk update data to apply:', updateData);
+
+    // If both stepIn and stepOut are provided and not null, calculate totalTime
+    if (stepIn !== undefined && stepOut !== undefined && stepIn !== null && stepOut !== null) {
       const stepInTime = new Date(stepIn);
       const stepOutTime = new Date(stepOut);
       updateData.totalTime = Math.floor((stepOutTime - stepInTime) / (1000 * 60)); // in minutes
+    } else if (stepOut === null) {
+      // If stepOut is cleared, also clear totalTime
+      updateData.totalTime = null;
     }
 
     // Update all selected attendance records
@@ -229,8 +266,8 @@ export const bulkUpdateAttendance = async (req, res) => {
       { runValidators: true }
     );
 
-    // Update employee working status if stepping out
-    if (stepOut !== undefined) {
+    // Update employee working status if stepping out (and stepOut is not null)
+    if (stepOut !== undefined && stepOut !== null) {
       // Get all affected employeeIds
       const attendances = await Attendance.find({ _id: { $in: attendanceIds } });
       const employeeIds = [...new Set(attendances.map(a => a.employeeId))];
@@ -485,6 +522,41 @@ export const bulkStepIn = async (req, res) => {
   }
 };
 
+// Delete attendance record
+export const deleteAttendance = async (req, res) => {
+  try {
+    const { attendanceId } = req.params;
+    
+    console.log('Delete attendance request for ID:', attendanceId);
 
+    // Find the attendance record
+    const attendance = await Attendance.findById(attendanceId);
+    if (!attendance) {
+      return res.status(404).json({ message: "Attendance record not found" });
+    }
 
+    // Get employee ID for updating working status
+    const employeeId = attendance.employeeId;
 
+    // Delete the attendance record
+    await Attendance.findByIdAndDelete(attendanceId);
+
+    // Update employee working status if they were working
+    if (attendance.stepOut === null || attendance.stepOut === undefined) {
+      // Employee was still working, set to not working
+      await Employee.findByIdAndUpdate(employeeId, { isWorking: false });
+      console.log(`Updated employee ${employeeId} working status to false`);
+    }
+
+    console.log(`Successfully deleted attendance record ${attendanceId}`);
+
+    res.status(200).json({ 
+      message: "Attendance record deleted successfully",
+      deletedId: attendanceId
+    });
+
+  } catch (error) {
+    console.error("Error deleting attendance:", error);
+    res.status(500).json({ message: "Error deleting attendance", error: error.message });
+  }
+};
