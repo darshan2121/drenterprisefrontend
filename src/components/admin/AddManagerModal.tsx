@@ -198,7 +198,7 @@ export function AddManagerModal() {
     const currentAdmin = authService.getCurrentUser();
     console.log('🔍 [AddManagerModal] Current admin:', currentAdmin);
     
-    if (!currentAdmin?.id) {
+    if (!currentAdmin?._id) {
       console.log('❌ [AddManagerModal] No current admin found');
       toast({
         title: "Error",
@@ -213,7 +213,7 @@ export function AddManagerModal() {
     const managerData = {
       name: form.name,
       email: form.email,
-      adminId: currentAdmin.id,
+      adminId: currentAdmin.id || currentAdmin.id,
       password: form.password,
       address: form.location,
       location: form.location,
