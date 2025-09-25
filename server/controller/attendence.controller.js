@@ -65,7 +65,7 @@ const getShiftEndTime = (clockInTime, shift) => {
 export const markStepIn = async (req, res) => {
   try {
     // console.log("[DEBUG] markStepIn request body:", req.body);
-    const { employeeId, managerId, longitude, latitude, address, note } = req.body;
+    const { employeeId, managerId, longitude, latitude, address, note, shift } = req.body;
 
     // Check if there is already an open attendance for this employee
     const openAttendance = await Attendance.findOne({ employeeId, stepOut: { $exists: false } });
@@ -76,9 +76,9 @@ export const markStepIn = async (req, res) => {
     const stepIn = getCurrentISTTime();
     const stepInImage = req.file ? req.file.filename : null;
     
-    // Auto-detect shift based on clock-in time
-    const detectedShift = getShiftFromTime(stepIn);
-    console.log(`Auto-detected shift: ${detectedShift} for clock-in time: ${stepIn.toLocaleString()}`);
+    // Use shift from request body if provided, otherwise auto-detect based on clock-in time
+    const finalShift = shift || getShiftFromTime(stepIn);
+    console.log(`Using shift: ${finalShift} (${shift ? 'from request' : 'auto-detected'}) for clock-in time: ${stepIn.toLocaleString()}`);
 
     const attendance = new Attendance({
       employeeId,
@@ -93,7 +93,7 @@ export const markStepIn = async (req, res) => {
       latitude,
       address,
       note,
-      shift: detectedShift // Use auto-detected shift
+      shift: finalShift // Use shift from request or auto-detected
     });
 
     await attendance.save();
@@ -101,8 +101,8 @@ export const markStepIn = async (req, res) => {
     res.status(201).json({ 
       message: "Step In marked", 
       attendance: formatAttendanceForAPI(attendance),
-      detectedShift: detectedShift,
-      shiftEndTime: getShiftEndTime(stepIn, detectedShift)
+      detectedShift: finalShift,
+      shiftEndTime: getShiftEndTime(stepIn, finalShift)
     });
   } catch (error) {
     console.error("Error marking step in:", error);
