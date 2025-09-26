@@ -884,7 +884,9 @@ export function ReportsTable({
   );
 
   // Mobile view with checkboxes
-  const renderMobileCard = (report: Report) => (
+  const renderMobileCard = (report: Report) => {
+    // console.log('📱 Rendering mobile card for:', report.employee, 'disableActions:', disableActions);
+    return (
     <Card key={report._id || report.id} className="shadow-sm">
       {isBulkEditAvailable && (
         <div className="absolute top-4 left-4">
@@ -928,7 +930,7 @@ export function ReportsTable({
         <p className="truncate"><strong className="text-muted-foreground">Clock Out:</strong> {report.clockOut}</p>
         <div className="flex flex-col sm:flex-row gap-2 pt-2">
           {!disableActions && (
-            <div className="flex gap-2">
+            <div className="flex gap-2 w-full">
               <EditReportModal 
                 report={report} 
                 onRefresh={onRefresh}
@@ -941,9 +943,9 @@ export function ReportsTable({
                 onSuccess={() => onRefresh?.()}
               >
                 <Button
-                  variant="outline"
+                  variant="destructive"
                   size="sm"
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  className="text-white bg-red-600 hover:bg-red-700 flex-1 sm:flex-none min-w-[80px]"
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Delete
@@ -951,10 +953,16 @@ export function ReportsTable({
               </DeleteAttendanceModal>
             </div>
           )}
+          {disableActions && (
+            <div className="text-muted-foreground text-sm">Actions disabled</div>
+          )}
+          {/* Debug: Always show a test button */}
+      <></>
         </div>
       </CardContent>
     </Card>
-  );
+    );
+  };
 
   if (loading) {
     return (
@@ -965,6 +973,8 @@ export function ReportsTable({
   }
 
   if (isMobile || isReactNativeWebView()) {
+    console.log('📱 Mobile view rendered with', reports.length, 'reports');
+    console.log('📱 disableActions:', disableActions);
     return (
       <div className="p-2 sm:p-4 md:p-0">
         <div className="flex justify-end mb-4">
