@@ -624,14 +624,14 @@ export default function ReportsPage() {
                               </div>
                             )}
                             
-                            {report.note && (
+                            {/* {report.note && (
                               <div className="mt-2 text-sm">
                                 <span className="text-gray-500 dark:text-gray-400">Note:</span>
                                 <div className="font-medium text-gray-900 dark:text-gray-100 mt-1">
                                   {report.note}
                                 </div>
                               </div>
-                            )}
+                            )} */}
                             {/* Action Buttons */}
                             {!isReadonly && (
                               <div className="flex gap-2 pt-4">
