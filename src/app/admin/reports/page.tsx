@@ -20,12 +20,19 @@ import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
 import { HeaderActions } from "@/components/admin/ReportsTable";
 import { Edit3, Download, FileDown, RefreshCw, Loader2, Trash2 } from "lucide-react";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import * as XLSX from "xlsx";
-import { pdfDownloadService, PDFDownloadService } from "@/services/pdfDownloadService";
 import { PDFDownloadButton } from "@/components/ui/pdf-download-button";
 import { Button } from "@/components/ui/button";
+import dynamic from "next/dynamic";
+
+// Lazy load heavy libraries only when needed
+const loadXLSX = () => import("xlsx").then(mod => mod.default || mod);
+const loadPDF = async () => {
+  const [jsPDF, autoTable] = await Promise.all([
+    import("jspdf").then(mod => mod.default),
+    import("jspdf-autotable").then(mod => mod.default)
+  ]);
+  return { jsPDF, autoTable };
+};
 
 export default function ReportsPage() {
     const router = useRouter();
@@ -127,10 +134,12 @@ export default function ReportsPage() {
       fetchAttendanceData();
     }, []); // Only run once on mount
     
-    // Clear selectedIds when filters change or when readonly status changes
+    // Clear selectedIds when readonly status changes (keep selection when filters change)
     useEffect(() => {
-      setSelectedIds([]);
-    }, [filters.shift, isReadonly]);
+      if (isReadonly) {
+        setSelectedIds([]);
+      }
+    }, [isReadonly]);
 
     // Convert API data to expected format
     const formattedReports = useMemo(() => {
@@ -384,7 +393,7 @@ export default function ReportsPage() {
                           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                             Reports ({filteredReports.length}) {totalPages > 1 && `- Page ${currentPage} of ${totalPages}`}
                           </h3>
-                          {filters.shift && selectedIds.length > 0 && (
+                          {selectedIds.length > 0 && (
                             <span className="text-sm text-blue-600 dark:text-blue-400 font-medium bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded">
                               {selectedIds.length} selected
                             </span>
@@ -412,7 +421,9 @@ export default function ReportsPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => {
+                            onClick={async () => {
+                              // Lazy load XLSX only when needed
+                              const XLSX = await loadXLSX();
                               const worksheet = XLSX.utils.json_to_sheet(
                                 filteredReports.map((report) => ({
                                   Date: report.date,
@@ -469,7 +480,7 @@ export default function ReportsPage() {
                       </div>
                       
                       {/* Full Width Bulk Update Button */}
-                      {filters.shift && selectedIds.length > 0 && !isReadonly && (
+                      {selectedIds.length > 0 && !isReadonly && (
                         <div className="mb-4">
                           <BulkUpdateModal
                             selectedIds={selectedIds}
@@ -510,7 +521,7 @@ export default function ReportsPage() {
                     ) : (
                       <div className="space-y-3">
                         {/* Mobile Select All Header */}
-                        {filters.shift && !isReadonly && (
+                        {!isReadonly && (
                           <div className="flex items-center gap-3 mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                             <input
                               type="checkbox"
@@ -543,7 +554,7 @@ export default function ReportsPage() {
                           <div key={report._id} className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2 flex-1 min-w-0">
-                                {filters.shift && !isReadonly && (
+                                {!isReadonly && (
                                   <input
                                     type="checkbox"
                                     checked={selectedIds.includes(report._id || '')}
@@ -671,7 +682,7 @@ export default function ReportsPage() {
                         ))}
                         
                         {/* Mobile Bulk Update Button */}
-                        {filters.shift && selectedIds.length > 0 && !isReadonly && (
+                        {selectedIds.length > 0 && !isReadonly && (
                           <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                             <BulkUpdateModal
                               selectedIds={selectedIds}

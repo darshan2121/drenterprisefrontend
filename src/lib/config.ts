@@ -1,5 +1,5 @@
 // Manual switch: set to true for local development, false for production
-const USE_LOCAL_BACKEND = false;
+const USE_LOCAL_BACKEND = true;
 
 // API Configuration
 export const API_CONFIG = {

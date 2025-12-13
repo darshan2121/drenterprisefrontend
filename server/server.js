@@ -11,7 +11,7 @@ import adminRoutes from './routes/admin.routes.js';
 import employeeRoutes from './routes/employee.routes.js';
 import dashboardRoutes from "./routes/dashboard.routes.js";
 import attendenceRoutes from "./routes/attendence.routes.js"
-import { autoStepOut } from './controller/cron.controller.js';
+import { autoStepOut, autoStepIn } from './controller/cron.controller.js';
 import { forgotPassword } from './controller/auth.controller.js';
 
 dotenv.config();
@@ -52,6 +52,11 @@ app.use("/api/attendence",attendenceRoutes)
 app.use("/api/auth",authRouter)
 
 cron.schedule("*/30 * * * *", autoStepOut, {
+  timezone: "Asia/Kolkata"
+});
+
+// Run every 1 hour - Auto step-in at shift start times (7 AM, 3 PM, 11 PM)
+cron.schedule("0 * * * *", autoStepIn, {
   timezone: "Asia/Kolkata"
 });
 

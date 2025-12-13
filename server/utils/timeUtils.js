@@ -52,6 +52,21 @@ export const getHoursAgoInIST = (hours) => {
 };
 
 /**
+ * Get current hour in IST timezone
+ * @returns {number} Current hour in IST (0-23)
+ */
+export const getCurrentISTHour = () => {
+  const now = new Date();
+  // Get hour in IST timezone
+  const istHour = parseInt(now.toLocaleString("en-US", {
+    timeZone: "Asia/Kolkata",
+    hour: "numeric",
+    hour12: false
+  }));
+  return istHour;
+};
+
+/**
  * Format date for API response in IST timezone
  * @param {Date} date - Date to format
  * @returns {string} Formatted date string in IST

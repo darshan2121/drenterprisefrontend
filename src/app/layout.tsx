@@ -5,6 +5,31 @@ import { Toaster } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { StoreProvider } from "@/providers/StoreProvider";
 
+// Ensure a safe localStorage implementation during SSR to avoid node's broken
+// experimental localStorage (which lacks getItem/setItem by default).
+if (
+  typeof globalThis.localStorage !== "object" ||
+  typeof (globalThis as any).localStorage?.getItem !== "function"
+) {
+  const memoryStore = new Map<string, string>();
+  (globalThis as any).localStorage = {
+    getItem: (key: string) => (memoryStore.has(key) ? memoryStore.get(key)! : null),
+    setItem: (key: string, value: string) => {
+      memoryStore.set(key, String(value));
+    },
+    removeItem: (key: string) => {
+      memoryStore.delete(key);
+    },
+    clear: () => {
+      memoryStore.clear();
+    },
+    key: (index: number) => Array.from(memoryStore.keys())[index] ?? null,
+    get length() {
+      return memoryStore.size;
+    },
+  };
+}
+
 const fontBody = Inter({
   subsets: ["latin"],
   variable: "--font-body",

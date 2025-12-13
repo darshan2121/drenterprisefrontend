@@ -560,3 +560,82 @@ export const deleteAttendance = async (req, res) => {
     res.status(500).json({ message: "Error deleting attendance", error: error.message });
   }
 };
+
+// Get attendance summary (count of present employees by date and shift)
+export const getAttendanceSummary = async (req, res) => {
+  try {
+    const { date, shift } = req.query;
+    
+    // Validate required parameters
+    if (!date || !shift) {
+      return res.status(400).json({ 
+        message: "Date and shift are required",
+        error: "Missing required parameters"
+      });
+    }
+
+    // Validate shift
+    if (!['morning', 'evening', 'night'].includes(shift)) {
+      return res.status(400).json({ 
+        message: "Invalid shift. Must be morning, evening, or night",
+        error: "Invalid shift value"
+      });
+    }
+
+    // Parse the date
+    const targetDate = new Date(date);
+    if (isNaN(targetDate.getTime())) {
+      return res.status(400).json({ 
+        message: "Invalid date format",
+        error: "Date parsing failed"
+      });
+    }
+
+    // Set date range for the target date (start of day to end of day)
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(targetDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // Get total employees for this shift
+    const totalEmployees = await Employee.countDocuments({ shift: shift });
+
+    // Get present employees (optimized query with projection)
+    // Count distinct employees who have stepIn on this date with this shift
+    // Using aggregation for better performance on large datasets
+    const presentEmployees = await Attendance.aggregate([
+      {
+        $match: {
+          shift: shift,
+          stepIn: {
+            $gte: startOfDay,
+            $lte: endOfDay
+          }
+        }
+      },
+      {
+        $group: {
+          _id: "$employeeId"
+        }
+      }
+    ]);
+
+    const presentCount = presentEmployees.length;
+
+    res.status(200).json({
+      date: date,
+      shift: shift,
+      totalEmployees: totalEmployees,
+      presentEmployees: presentCount,
+      summary: `${presentCount}P/${totalEmployees}`
+    });
+
+  } catch (error) {
+    console.error("Error fetching attendance summary:", error);
+    res.status(500).json({ 
+      message: "Error fetching attendance summary", 
+      error: error.message 
+    });
+  }
+};

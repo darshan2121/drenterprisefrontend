@@ -28,32 +28,75 @@ import {
   FileText,
   LogOut,
   Shield,
+  Table,
+  BarChart3,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 import { useAuth } from "@/hooks/useAuth";
 import { authService } from "@/services/authService";
-import { useRouter } from "next/navigation";
-import { useCallback } from "react";
+import { useCallback, useState, startTransition, useMemo } from "react";
+import { Loader2 } from "lucide-react";
 
 const menuItems = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/employees", label: "Employees", icon: Users },
   { href: "/admin/managers", label: "Supervisor", icon: UserCog },
   { href: "/admin/admins", label: "Admins", icon: Shield },
+  { href: "/admin/reports/muster", label: "Muster Roll", icon: Table },
   { href: "/admin/reports", label: "Reports", icon: FileText },
+  { href: "/admin/reports/summary", label: "Summary Report", icon: BarChart3 },
 ];
 
 export function AdminSidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { state, setOpenMobile, isMobile } = useSidebar();
   const { logout } = useAuth();
-  const router = useRouter();
-  const isReadonly = useCallback(() => {
+  const [navigatingTo, setNavigatingTo] = useState<string | null>(null);
+  
+  // Memoize readonly check to prevent re-renders
+  const isReadonly = useMemo(() => {
     return authService.getCurrentUser()?.role === "readonly";
   }, []);
+  
+  // Memoize filtered menu items
+  const filteredMenuItems = useMemo(() => {
+    return isReadonly
+      ? menuItems.filter(item => ["Reports", "Muster Roll", "Summary Report"].includes(item.label))
+      : menuItems;
+  }, [isReadonly]);
+
+  const handleNavigation = useCallback((href: string) => {
+    // Close mobile sidebar immediately for instant feedback
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+    
+    // Don't navigate if already on this page
+    if (pathname.startsWith(href)) {
+      return;
+    }
+    
+    // Set loading state immediately for visual feedback
+    setNavigatingTo(href);
+    
+    // Use startTransition for non-blocking navigation
+    startTransition(() => {
+      // Use replace for faster navigation on mobile
+      if (isMobile) {
+        router.replace(href);
+      } else {
+        router.push(href);
+      }
+      // Clear loading state after navigation
+      setTimeout(() => {
+        setNavigatingTo(null);
+      }, 200);
+    });
+  }, [router, isMobile, setOpenMobile, pathname]);
 
   return (
     <>
@@ -74,36 +117,49 @@ export function AdminSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarMenu>
-          {(isReadonly()
-            ? menuItems.filter(item => item.label === "Reports")
-            : menuItems
-          ).map((item) => (
-            <SidebarMenuItem key={item.label}>
-              <SidebarMenuButton
-                isActive={pathname.startsWith(item.href)}
-                tooltip={item.label}
-                onClick={() => {
-                  console.log('🔄 Sidebar navigation clicked:', item.href);
-                  router.push(item.href);
-                  // Always close mobile sidebar after navigation
-                  if (isMobile) {
-                    setOpenMobile(false);
+          {filteredMenuItems.map((item) => {
+            const isNavigating = navigatingTo === item.href;
+            const isActive = pathname.startsWith(item.href);
+            
+            return (
+              <SidebarMenuItem key={item.label}>
+                <SidebarMenuButton
+                  isActive={isActive}
+                  tooltip={item.label}
+                  onClick={() => handleNavigation(item.href)}
+                  onMouseEnter={() => {
+                    // Prefetch on hover for faster navigation (desktop only)
+                    if (!isMobile && !isActive && !isNavigating) {
+                      router.prefetch(item.href);
+                    }
+                  }}
+                  onTouchStart={() => {
+                    // Prefetch on touch start for mobile (faster than click)
+                    if (isMobile && !isActive && !isNavigating) {
+                      router.prefetch(item.href);
+                    }
+                  }}
+                  disabled={isNavigating}
+                  className={
+                    cn(
+                      isActive ? "bg-primary/10 text-primary" : "",
+                      "w-full h-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors hover:bg-accent hover:text-accent-foreground",
+                      "text-base sm:text-sm lg:text-base",
+                      "min-h-[48px] sm:min-h-[40px]",
+                      isNavigating && "opacity-70"
+                    )
                   }
-                }}
-                className={
-                  cn(
-                    pathname.startsWith(item.href) ? "bg-primary/10 text-primary" : "",
-                    "w-full h-full flex items-center gap-3 px-4 py-3 rounded-md transition-colors hover:bg-accent hover:text-accent-foreground",
-                    "text-base sm:text-sm lg:text-base",
-                    "min-h-[48px] sm:min-h-[40px]"
-                  )
-                }
-              >
-                <item.icon className="h-6 w-6 flex-shrink-0" />
-                <span className="font-medium truncate">{item.label}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
+                >
+                  {isNavigating ? (
+                    <Loader2 className="h-6 w-6 flex-shrink-0 animate-spin" />
+                  ) : (
+                    <item.icon className="h-6 w-6 flex-shrink-0" />
+                  )}
+                  <span className="font-medium truncate">{item.label}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
         </SidebarMenu>
       </SidebarContent>
       

@@ -23,6 +23,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   }, [navigateReplace]);
 
   useEffect(() => {
+    // Optimized auth check for mobile - run immediately
     if (!isAdminAuthenticated()) {
       setIsAuthed(false);
       setChecking(false);
@@ -52,9 +53,23 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           overflow-x: hidden !important; 
           margin: 0;
           padding: 0;
+          /* Mobile performance optimizations */
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+          text-rendering: optimizeLegibility;
         }
         * {
           box-sizing: border-box;
+        }
+        
+        /* Mobile performance: GPU acceleration for animations */
+        @media (max-width: 768px) {
+          * {
+            -webkit-transform: translateZ(0);
+            transform: translateZ(0);
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+          }
         }
         
         /* Ensure no horizontal scroll on mobile */
@@ -62,6 +77,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           width: 100vw;
           max-width: 100%;
           overflow-x: hidden;
+          /* Mobile: prevent layout shifts */
+          contain: layout style paint;
         }
         
         /* Mobile-first responsive breakpoints */
@@ -104,6 +121,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           button, a, [role="button"] {
             min-height: 44px;
             min-width: 44px;
+            /* Mobile: prevent tap highlight delay */
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
           }
           
           /* Improve spacing on very small screens */
@@ -114,6 +134,19 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           /* Optimize card padding for mobile */
           .card-mobile-optimized {
             padding: 0.75rem !important;
+          }
+          
+          /* Mobile: optimize scrolling */
+          * {
+            -webkit-overflow-scrolling: touch;
+          }
+        }
+        
+        /* Mobile: Optimize sidebar transitions */
+        @media (max-width: 768px) {
+          [data-sidebar="sidebar"] {
+            will-change: transform;
+            transition: transform 0.2s ease-out;
           }
         }
         
