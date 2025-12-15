@@ -7,7 +7,7 @@ export interface LoginCredentials {
 }
 
 export interface AdminData {
-  id: string;
+  _id: string;
   email: string;
   name: string;
   mobile: string;

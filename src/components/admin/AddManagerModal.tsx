@@ -213,7 +213,7 @@ export function AddManagerModal() {
     const managerData = {
       name: form.name,
       email: form.email,
-      adminId: currentAdmin.id || currentAdmin.id,
+      adminId: currentAdmin._id,
       password: form.password,
       address: form.location,
       location: form.location,

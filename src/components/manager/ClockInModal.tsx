@@ -519,8 +519,8 @@ export function ClockInModal({ employee, attendanceId: propAttendanceId, status,
       const formData = new FormData();
       formData.append('longitude', longitude || '0');
       formData.append('latitude', latitude || '0');
-      formData.append('address', 'Auto clock out');
-      formData.append('note', 'Clock out via button');
+      formData.append('address', '');
+      formData.append('note', '');
       formData.append('stepOut', new Date().toISOString());
       formData.append('attendanceId', attendanceIdFromRedux);
       const resultAction = await dispatch(clockOut(formData) as any);

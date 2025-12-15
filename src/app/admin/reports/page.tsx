@@ -13,12 +13,13 @@ import { http } from "@/lib/http";
 import { getApiUrl } from "@/lib/config";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { EditReportModal } from "@/components/admin/EditReportModal";
+import { DeleteAttendanceModal } from "@/components/admin/DeleteAttendanceModal";
 import { BulkUpdateModal } from "@/components/admin/BulkUpdateModal";
 import { authService } from "@/services/authService";
 import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
 import { HeaderActions } from "@/components/admin/ReportsTable";
-import { Edit3, Download, FileDown, RefreshCw, Loader2 } from "lucide-react";
+import { Edit3, Download, FileDown, RefreshCw, Loader2, Trash2 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
@@ -624,14 +625,14 @@ export default function ReportsPage() {
                               </div>
                             )}
                             
-                            {report.note && (
+                            {/* {report.note && (
                               <div className="mt-2 text-sm">
                                 <span className="text-gray-500 dark:text-gray-400">Note:</span>
                                 <div className="font-medium text-gray-900 dark:text-gray-100 mt-1">
                                   {report.note}
                                 </div>
                               </div>
-                            )}
+                            )} */}
                             {/* Action Buttons */}
                             {!isReadonly && (
                               <div className="flex gap-2 pt-4">
@@ -646,6 +647,24 @@ export default function ReportsPage() {
                                     order: filters.order,
                                   }}
                                 />
+                                <DeleteAttendanceModal
+                                  attendanceId={report._id || ''}
+                                  employeeName={report.employee}
+                                  date={report.date}
+                                  onSuccess={() => {
+                                    console.log('🔄 Delete success - refreshing mobile view');
+                                    handleRefresh();
+                                  }}
+                                >
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    className="text-white bg-red-600 hover:bg-red-700 flex-1"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </Button>
+                                </DeleteAttendanceModal>
                               </div>
                             )}
                           </div>
