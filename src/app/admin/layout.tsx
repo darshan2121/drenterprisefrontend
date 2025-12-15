@@ -150,6 +150,30 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           }
         }
         
+        /* Fix sidebar to be fixed and only content scrolls */
+        @media (min-width: 768px) {
+          .admin-container {
+            height: 100vh;
+            overflow: hidden;
+          }
+          
+          /* Ensure sidebar content can scroll if needed */
+          [data-sidebar="sidebar"] {
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
+          }
+          
+          /* Make content area scrollable - SidebarInset already handles spacing via peer */
+          .admin-main {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            min-height: 0; /* Important for flex scrolling */
+            -webkit-overflow-scrolling: touch;
+          }
+        }
+        
         /* Landscape orientation optimizations */
         @media (max-height: 500px) and (orientation: landscape) {
           .admin-main {
@@ -165,21 +189,21 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         }
       `}</style>
       
-      <div className="admin-container flex min-h-screen bg-gray-50 dark:bg-gray-950">
+      <div className="admin-container flex h-screen bg-gray-50 dark:bg-gray-950 overflow-hidden">
         {/* Sidebar - Responsive with mobile support */}
         <Sidebar className="w-64 border-r border-gray-200 dark:border-gray-800">
           <AdminSidebar />
         </Sidebar>
         
-        {/* Main Content Area */}
-        <SidebarInset className="flex-1 flex flex-col min-w-0">
-          {/* Header - Responsive */}
-          <div className="sticky top-0 z-40 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+        {/* Main Content Area - Scrollable */}
+        <SidebarInset className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {/* Header - Responsive - Fixed at top */}
+          <div className="sticky top-0 z-40 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800 flex-shrink-0">
             <AdminHeader />
           </div>
           
-          {/* Main Content - Fully responsive */}
-          <main className="admin-main flex-1 w-full max-w-full overflow-x-hidden">
+          {/* Main Content - Fully responsive - Scrollable */}
+          <main className="admin-main flex-1 w-full max-w-full overflow-y-auto overflow-x-hidden">
             <div className="w-full max-w-none">
               {children}
             </div>

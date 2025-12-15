@@ -160,24 +160,37 @@ export const updateAttendance = async (req, res) => {
     if (employeeId !== undefined) updateData.employeeId = employeeId;
     if (managerId !== undefined) updateData.managerId = managerId;
     if (stepIn !== undefined) updateData.stepIn = new Date(stepIn);
-    if (totalTime !== undefined) updateData.totalTime = totalTime;
     if (shift !== undefined) updateData.shift = shift;
 
     // Handle stepOut update
     if (stepOut !== undefined) {
       updateData.stepOut = new Date(stepOut);
       
-      // Calculate totalTime if not provided
-      if (totalTime === undefined && attendance.stepIn) {
-        const stepInTime = new Date(attendance.stepIn);
-        const stepOutTime = new Date(stepOut);
-        updateData.totalTime = Math.floor((stepOutTime - stepInTime) / (1000 * 60)); // in minutes
-      }
-      
       // Update employee working status when stepping out
       if (attendance.employeeId) {
         await Employee.findByIdAndUpdate(attendance.employeeId, { isWorking: false });
       }
+    }
+
+    // Calculate totalTime if both stepIn and stepOut are provided (or updated)
+    // Use the new values from updateData if available, otherwise use existing values from attendance
+    const finalStepIn = updateData.stepIn || attendance.stepIn;
+    const finalStepOut = updateData.stepOut !== undefined ? updateData.stepOut : attendance.stepOut;
+    
+    // If stepOut is being cleared (set to null), also clear totalTime
+    if (stepOut === null) {
+      updateData.totalTime = null;
+      console.log('stepOut cleared, totalTime set to null');
+    }
+    // Only calculate totalTime if both stepIn and stepOut exist and totalTime wasn't explicitly provided
+    else if (totalTime === undefined && finalStepIn && finalStepOut) {
+      const stepInTime = new Date(finalStepIn);
+      const stepOutTime = new Date(finalStepOut);
+      updateData.totalTime = Math.floor((stepOutTime - stepInTime) / (1000 * 60)); // in minutes
+      console.log(`Calculated totalTime: ${updateData.totalTime} minutes from stepIn: ${stepInTime.toISOString()} to stepOut: ${stepOutTime.toISOString()}`);
+    } else if (totalTime !== undefined) {
+      // If totalTime is explicitly provided, use it
+      updateData.totalTime = totalTime;
     }
 
     // Handle image updates

@@ -52,8 +52,26 @@ export function ManagersList() {
     }
   };
 
-  if (isLoading) return <div className="p-8 text-center text-muted-foreground">Loading supervisors...</div>;
-  if (error) return <div className="p-8 text-center text-destructive">{error}</div>;
+  if (isLoading) {
+    return (
+      <div className="p-8 text-center">
+        <div className="flex flex-col items-center justify-center space-y-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+          <span className="text-muted-foreground">Loading supervisors...</span>
+        </div>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="p-8 text-center">
+        <div className="text-destructive">
+          <p className="font-medium">Error loading supervisors</p>
+          <p className="text-sm mt-2">{error}</p>
+        </div>
+      </div>
+    );
+  }
 
   if (isMobile) {
     return (

@@ -4,7 +4,7 @@ import { getToken } from '../utils/auth';
 
 const instance = axios.create({
   // Point frontend API requests to the local backend; adjust if deploying.
-  baseURL: 'http://localhost:5678/api',
+  baseURL: 'https://api.drenterprise.it/api',
   headers: { 'Content-Type': 'application/json' },
 });
 

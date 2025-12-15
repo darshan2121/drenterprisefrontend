@@ -16,7 +16,7 @@ export function decodeToken(token: string): any {
   }
 }
 
-function isAdminAuthenticated() {
+export function isAdminAuthenticated() {
   if (typeof window === "undefined") return false;
   return !!localStorage.getItem("adminToken");
 }
