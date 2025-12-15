@@ -68,5 +68,12 @@ const attendanceSchema = new Schema({
   timestamps: true
 });
 
+// Add indexes for better query performance
+attendanceSchema.index({ employeeId: 1, stepIn: 1 });
+attendanceSchema.index({ shift: 1, stepIn: 1 });
+attendanceSchema.index({ managerId: 1 });
+attendanceSchema.index({ stepIn: 1, shift: 1 }); // For summary queries
+attendanceSchema.index({ stepIn: 1 }); // For date range queries
+
 const Attendance = model("Attendance", attendanceSchema);
 export default Attendance;

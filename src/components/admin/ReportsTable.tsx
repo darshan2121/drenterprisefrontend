@@ -19,11 +19,18 @@ import { BulkUpdateModal } from "@/components/admin/BulkUpdateModal";
 import { DeleteAttendanceModal } from "./DeleteAttendanceModal";
 import { PDFDownloadButton } from "@/components/ui/pdf-download-button";
 import { pdfDownloadService } from "@/services/pdfDownloadService";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import * as XLSX from "xlsx";
 import { useState, useEffect } from "react";
 import { getApiUrl } from "@/lib/config";
+
+// Lazy load heavy libraries
+const loadXLSX = () => import("xlsx").then(mod => mod.default || mod);
+const loadPDF = async () => {
+  const [jsPDF, autoTable] = await Promise.all([
+    import("jspdf").then(mod => mod.default),
+    import("jspdf-autotable").then(mod => mod.default)
+  ]);
+  return { jsPDF, autoTable };
+};
 
 // Employee type for fetching employee data
 type Employee = {
@@ -384,8 +391,8 @@ export function ReportsTable({
     setIsAllSelected(false);
   }, [reports, filters]);
 
-  // Check if bulk edit should be available (shift filter is applied)
-  const isBulkEditAvailable = Boolean(filters?.shift);
+  // Check if bulk edit should be available (always available unless readonly)
+  const isBulkEditAvailable = !disableActions;
 
   // Handle bulk edit completion
   const handleBulkEditComplete = (success: boolean) => {
@@ -423,6 +430,8 @@ export function ReportsTable({
     console.log('📄 LEGACY: Starting PDF export with', (allReports || reports).length, 'reports');
     console.log('📄 LEGACY: This is the working PDF generation method');
     
+    // Lazy load PDF libraries
+    const { jsPDF, autoTable } = await loadPDF();
     const doc = new jsPDF('l', 'mm', 'a4'); // Landscape for more space
     
     // Add professional header
@@ -636,6 +645,8 @@ export function ReportsTable({
 
   // Enhanced Excel Export Function
   const handleDownloadXls = async () => {
+    // Lazy load XLSX only when needed
+    const XLSX = await loadXLSX();
     console.log('📊 Starting Excel export with', (allReports || reports).length, 'reports');
     
     try {
@@ -724,7 +735,7 @@ export function ReportsTable({
     }
   };
 
-  // Add bulk edit button to header actions when shift filter is applied
+  // Add bulk edit button to header actions when reports are selected
   const EnhancedHeaderActions = () => (
     <div className="flex items-center gap-2">
       {isBulkEditAvailable && selectedReports.length > 0 && (
@@ -764,7 +775,7 @@ export function ReportsTable({
     </div>
   );
 
-  // Modify the table header to include bulk edit controls when shift filter is applied
+  // Modify the table header to include bulk edit controls
   const renderTableHeader = () => (
     <TableHeader>
       <TableRow>
@@ -793,7 +804,7 @@ export function ReportsTable({
     </TableHeader>
   );
 
-  // Modify the table row to include checkbox when shift filter is applied
+  // Modify the table row to include checkbox for selection
   const renderTableRow = (report: Report) => (
     <TableRow key={report._id || report.id}>
       {isBulkEditAvailable && (

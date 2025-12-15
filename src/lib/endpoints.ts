@@ -24,6 +24,7 @@ export const ENDPOINTS = {
     single: (id: string) => `${BASE_URL}/attendence/${id}`,
     all: `${BASE_URL}/attendence`,
     bulkUpdate: `${BASE_URL}/attendence/bulk-update`,
+    summary: `${BASE_URL}/attendence/summary`,
   },
   dashboard: `${BASE_URL}/dashboard`,
   auth: {

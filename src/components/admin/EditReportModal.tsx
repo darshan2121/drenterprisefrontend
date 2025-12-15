@@ -37,6 +37,8 @@ type Report = {
     _id?: string;
     attendanceId?: string;
     id?: string;
+    stepInDate?: string;
+    stepOutDate?: string;
     // Raw attendance data for location fields
     _raw?: {
         longitude?: number;
@@ -117,6 +119,8 @@ export function EditReportModal({
   const [shift, setShift] = useState(report.shift);
   const [clockIn, setClockIn] = useState(convertTo24Hour(report.clockIn));
   const [clockOut, setClockOut] = useState(convertTo24Hour(report.clockOut));
+  const [startDate, setStartDate] = useState(report.stepInDate || report.date || '');
+  const [endDate, setEndDate] = useState(report.stepOutDate || '');
 
   const handleSaveChanges = async () => {
     setIsLoading(true);
@@ -124,35 +128,63 @@ export function EditReportModal({
       const attendanceId = report._id || report.attendanceId || report.id;
       if (!attendanceId) throw new Error('Attendance ID is missing');
       
-      // Convert clockIn and clockOut to ISO strings using the report date (local time, no 'Z')
+      // Convert clockIn and clockOut to ISO strings using the selected dates
       // Only process valid time values (not "--" or empty strings)
       const isValidTime = (time: string) => time && time !== '--' && time.trim() !== '' && time.match(/^\d{2}:\d{2}$/);
+      const isValidDate = (date: string) => date && date !== '--' && date.trim() !== '';
       
       let stepIn: string | undefined = undefined;
       let stepOut: string | undefined = undefined;
       
-      if (isValidTime(clockIn)) {
+      // Validate startDate is provided if clockIn is set
+      if (isValidTime(clockIn) && !isValidDate(startDate)) {
+        toast({
+          title: "Validation Error",
+          description: "Start Date is required when Clock In time is provided.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      if (isValidTime(clockIn) && isValidDate(startDate)) {
         try {
-          // Create date in local timezone and store as UTC
-          const stepInDate = new Date(`${report.date}T${clockIn}:00`);
+          // Use the selected startDate instead of report.date
+          const stepInDate = new Date(`${startDate}T${clockIn}:00`);
           if (!isNaN(stepInDate.getTime())) {
             // Store as UTC (toISOString() automatically converts to UTC)
             stepIn = stepInDate.toISOString();
-            console.log(`Clock In: ${clockIn} -> ${stepIn} (UTC)`);
+            console.log(`Clock In: ${startDate} ${clockIn} -> ${stepIn} (UTC)`);
           }
         } catch (error) {
           console.error('Error parsing clockIn time:', clockIn, error);
         }
       }
       
-      if (isValidTime(clockOut)) {
+      if (isValidTime(clockOut) && endDate) {
         try {
-          // Create date in local timezone and store as UTC
-          const stepOutDate = new Date(`${report.date}T${clockOut}:00`);
+          // Use the selected endDate for stepOut
+          const stepOutDate = new Date(`${endDate}T${clockOut}:00`);
           if (!isNaN(stepOutDate.getTime())) {
             // Store as UTC (toISOString() automatically converts to UTC)
             stepOut = stepOutDate.toISOString();
-            console.log(`Clock Out: ${clockOut} -> ${stepOut} (UTC)`);
+            console.log(`Clock Out: ${endDate} ${clockOut} -> ${stepOut} (UTC)`);
+          }
+        } catch (error) {
+          console.error('Error parsing clockOut time:', clockOut, error);
+        }
+      } else if (isValidTime(clockOut) && !endDate && startDate) {
+        // If endDate is not provided but clockOut is, use startDate (same day)
+        try {
+          const stepOutDate = new Date(`${startDate}T${clockOut}:00`);
+          // Handle night shift that spans across midnight
+          if (shift === 'night' && clockIn && clockOut < clockIn) {
+            // If stepOut is earlier than stepIn, it means it's the next day
+            stepOutDate.setDate(stepOutDate.getDate() + 1);
+          }
+          if (!isNaN(stepOutDate.getTime())) {
+            stepOut = stepOutDate.toISOString();
+            console.log(`Clock Out: ${startDate} ${clockOut} -> ${stepOut} (UTC)`);
           }
         } catch (error) {
           console.error('Error parsing clockOut time:', clockOut, error);
@@ -228,8 +260,10 @@ export function EditReportModal({
       const hasShiftChange = shift !== report.shift;
       const hasTimeChanges = stepIn !== undefined || stepOut !== undefined;
       const hasLocationChanges = location !== report.location;
+      const hasStartDateChange = startDate !== (report.stepInDate || report.date);
+      const hasEndDateChange = endDate !== (report.stepOutDate || '');
       
-      if (!hasShiftChange && !hasTimeChanges && !hasLocationChanges) {
+      if (!hasShiftChange && !hasTimeChanges && !hasLocationChanges && !hasStartDateChange && !hasEndDateChange) {
         toast({
           title: "No Changes",
           description: "Please make some changes before saving.",
@@ -244,7 +278,7 @@ export function EditReportModal({
 
       toast({
         title: "Success!",
-        description: `Report has been updated for ${report.employee} on ${report.date}.`,
+        description: `Report has been updated for ${report.employee}${startDate ? ` on ${startDate}` : ''}.`,
       });
       setIsOpen(false);
     } catch (error: any) {
@@ -265,6 +299,8 @@ export function EditReportModal({
         setShift(report.shift);
         setClockIn(convertTo24Hour(report.clockIn));
         setClockOut(convertTo24Hour(report.clockOut));
+        setStartDate(report.stepInDate || report.date || '');
+        setEndDate(report.stepOutDate || '');
     }
     setIsOpen(open);
   }
@@ -299,6 +335,17 @@ export function EditReportModal({
             </Select>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="startDate" className="text-right">Start Date</Label>
+            <Input 
+                id="startDate" 
+                type="date"
+                value={startDate} 
+                onChange={(e) => setStartDate(e.target.value)} 
+                className="col-span-3" 
+                disabled={isLoading}
+            />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="clockIn" className="text-right">Clock In</Label>
             <Input 
                 id="clockIn" 
@@ -308,6 +355,17 @@ export function EditReportModal({
                 className="col-span-3" 
                 disabled={isLoading}
                 placeholder="HH:MM"
+            />
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="endDate" className="text-right">End Date</Label>
+            <Input 
+                id="endDate" 
+                type="date"
+                value={endDate} 
+                onChange={(e) => setEndDate(e.target.value)} 
+                className="col-span-3" 
+                disabled={isLoading}
             />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">

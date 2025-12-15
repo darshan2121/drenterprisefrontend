@@ -8,7 +8,8 @@ import {
   updateAttendance,
   bulkUpdateAttendance,
   bulkStepIn,
-  deleteAttendance
+  deleteAttendance,
+  getAttendanceSummary
 } from "../controller/attendence.controller.js";
 import { authenticateUser } from "../utils/middlewere.js";
 
@@ -61,6 +62,9 @@ router.post("/bulk-step-in", upload.single("stepInImage"), bulkStepIn);
 
 // Step out: parse FormData with no file
 router.post("/step-out", authenticateUser, upload.none(), markStepOut);
+
+// Get attendance summary (count by date and shift)
+router.get("/summary", authenticateUser, getAttendanceSummary);
 
 // 
 router.get("/", authenticateUser, getAllAttendance);
