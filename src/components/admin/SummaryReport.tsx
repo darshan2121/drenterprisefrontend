@@ -24,6 +24,9 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { ENDPOINTS } from "@/lib/endpoints";
 import { http } from "@/lib/http";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useDispatch, useSelector } from "react-redux";
+import { fetchEmployees } from "@/store/slices/employeeSlice";
+import { RootState } from "@/store";
 
 interface SummaryData {
   date: string;
@@ -38,15 +41,23 @@ interface DailySummary {
   morning: SummaryData | null;
   evening: SummaryData | null;
   night: SummaryData | null;
+  _uniqueEmployeeDays?: number; // Unique employee count for this date
 }
 
 export function SummaryReport() {
+  const dispatch = useDispatch();
+  const employees = useSelector((state: RootState) => state.employee.employees);
   const [fromDate, setFromDate] = useState<Date | undefined>(new Date());
   const [toDate, setToDate] = useState<Date | undefined>(new Date());
   const [rangeSummaries, setRangeSummaries] = useState<DailySummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isMobile = useIsMobile();
+
+  // Fetch employees on mount (same as Muster Roll)
+  useEffect(() => {
+    dispatch(fetchEmployees() as any);
+  }, [dispatch]);
 
   // Generate array of dates between fromDate and toDate
   const getDateRange = useCallback(() => {
@@ -69,6 +80,14 @@ export function SummaryReport() {
       return;
     }
 
+    // Ensure employees are loaded first (same as Muster Roll)
+    if (employees.length === 0) {
+      console.log("⏳ Waiting for employees to load...");
+      await dispatch(fetchEmployees() as any);
+      // Wait a bit for Redux state to update
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
     setLoading(true);
     setError(null);
 
@@ -76,13 +95,16 @@ export function SummaryReport() {
       const dateRange = getDateRange();
       const shifts = ['morning', 'evening', 'night'];
       
-      // Fetch data for all dates and all shifts
-      const allPromises: Promise<SummaryData | null>[] = [];
+      // Fetch attendance data for unique employee-day calculation
+      const startDateStr = format(dateRange[0], "yyyy-MM-dd");
+      const endDateStr = format(dateRange[dateRange.length - 1], "yyyy-MM-dd");
       
-      dateRange.forEach(date => {
-        const dateString = format(date, "yyyy-MM-dd");
-        shifts.forEach(shift => {
-          allPromises.push(
+      // Fetch attendance data and shift summaries in parallel
+      const [attendanceResponse, ...shiftPromises] = await Promise.all([
+        http<{ attendance: any[] }>(`${ENDPOINTS.attendance.all}?startDate=${startDateStr}&endDate=${endDateStr}&order=asc`),
+        ...dateRange.flatMap(date => {
+          const dateString = format(date, "yyyy-MM-dd");
+          return shifts.map(shift =>
             http<SummaryData>(
               `${ENDPOINTS.attendance.summary}?date=${dateString}&shift=${shift}`
             ).catch(err => {
@@ -90,21 +112,204 @@ export function SummaryReport() {
               return null;
             })
           );
+        })
+      ]);
+
+      // Normalize attendance array from API response
+      const attendanceArray = Array.isArray(attendanceResponse) ? attendanceResponse : 
+        (attendanceResponse as any)?.attendance || (attendanceResponse as any)?.data || [];
+
+      console.log("📊 Summary Report - Attendance data:", {
+        totalRecords: attendanceArray.length,
+        dateRange: `${startDateStr} to ${endDateStr}`,
+        employeesInSystem: employees.length,
+        sampleRecord: attendanceArray[0]
+      });
+
+      // Create a Set of valid employee IDs (only count employees that exist in the system)
+      // This matches Muster Roll's logic - it only counts employees from the employees list
+      const validEmployeeIds = new Set<string>();
+      employees.forEach((emp: any) => {
+        if (emp?._id) {
+          // Normalize ID to string for consistent comparison
+          const empId = String(emp._id);
+          validEmployeeIds.add(empId);
+        }
+      });
+
+      console.log("📊 Valid employees count:", validEmployeeIds.size);
+      console.log("📊 Sample valid employee IDs:", Array.from(validEmployeeIds).slice(0, 5));
+      
+      // Debug: Check sample attendance record employee IDs
+      const sampleEmpIds = attendanceArray.slice(0, 10).map((r: any) => {
+        // Use same extraction logic as Muster Roll
+        const id = r?.employeeId?._id || r?.employeeId || r?.employee?._id;
+        const normalizedId = id ? String(id) : null;
+        return { 
+          id: normalizedId, 
+          isValid: normalizedId ? validEmployeeIds.has(normalizedId) : false,
+          employeeIdType: typeof r?.employeeId,
+          employeeIdValue: r?.employeeId
+        };
+      });
+      console.log("📊 Sample attendance employee IDs:", sampleEmpIds);
+      
+      // Count how many unique employee IDs are in attendance but not in employees list
+      const attendanceEmpIds = new Set<string>();
+      attendanceArray.forEach((r: any) => {
+        const id = r?.employeeId?._id || r?.employeeId || r?.employee?._id;
+        if (id) attendanceEmpIds.add(String(id));
+      });
+      const missingFromEmployees = Array.from(attendanceEmpIds).filter(id => !validEmployeeIds.has(id));
+      console.log("📊 Employee IDs in attendance but NOT in employees list:", missingFromEmployees.length);
+      console.log("📊 Sample missing IDs:", missingFromEmployees.slice(0, 5));
+
+      // Calculate unique employee-days per date
+      // CRITICAL: Match Muster Roll's exact logic:
+      // 1. Filter attendance by month/year FIRST (like monthlyAttendance)
+      // 2. Build attendance map from filtered records
+      // 3. Iterate through ALL employees (not attendance records)
+      // 4. For each employee, count how many days they were present
+      // 5. Sum all present days across all employees
+      
+      // Extract month and year from dateRange (should all be same month)
+      const firstDate = dateRange[0];
+      const selectedYear = firstDate.getFullYear();
+      const selectedMonth = firstDate.getMonth();
+      
+      // Filter attendance by month/year FIRST (exactly like Muster Roll's monthlyAttendance)
+      const monthlyAttendance = attendanceArray.filter((record: any) => {
+        if (!record?.stepIn) return false;
+        const date = new Date(record.stepIn);
+        return (
+          date.getMonth() === selectedMonth && date.getFullYear() === selectedYear
+        );
+      });
+      
+      console.log("📊 Filtered monthly attendance:", {
+        totalRecords: attendanceArray.length,
+        monthlyRecords: monthlyAttendance.length,
+        year: selectedYear,
+        month: selectedMonth
+      });
+      
+      // Build attendance map exactly like Muster Roll does (using filtered records)
+      const attendanceMap = new Map<string, any>();
+      monthlyAttendance.forEach((record: any) => {
+        const empId = record?.employeeId?._id || record?.employeeId || record?.employee?._id;
+        const keyDate = record?.stepIn
+          ? new Date(record.stepIn).toISOString().split("T")[0]
+          : null;
+        if (!empId || !keyDate) return;
+        attendanceMap.set(`${empId}_${keyDate}`, record);
+      });
+
+      // Now calculate exactly like Muster Roll: iterate through employees and count their present days
+      // CRITICAL: Use the same date logic as Muster Roll - it uses day numbers, not Date objects
+      const uniqueEmployeeDaysByDate = new Map<string, Set<string>>();
+      
+      // For each employee, count their present days (matching Muster Roll's totalsByEmployee logic)
+      // Note: selectedYear and selectedMonth are already defined above
+      employees.forEach((emp: any) => {
+        if (!emp?._id) return;
+        const empId = String(emp._id);
+        
+        // Only count if employee is in valid list (though all should be)
+        if (!validEmployeeIds.has(empId)) return;
+        
+        // Check each date in the range using Muster Roll's exact logic
+        dateRange.forEach((date) => {
+          // Use Muster Roll's exact date construction: new Date(year, month, day)
+          const day = date.getDate();
+          const targetDate = new Date(selectedYear, selectedMonth, day);
+          const dateString = targetDate.toISOString().split("T")[0];
+          
+          // Use Muster Roll's exact map key format
+          const mapKey = `${empId}_${dateString}`;
+          const record = attendanceMap.get(mapKey);
+          
+          // Use Muster Roll's exact status checking logic
+          if (record) {
+            // Check status using same logic as getStatusFromRecord
+            let isPresent = false;
+            
+            // Prefer explicit status field
+            if (record.status) {
+              const normalized = String(record.status).toLowerCase();
+              if (normalized === "present") {
+                isPresent = true;
+              }
+            } else if (record.stepOut) {
+              // Has stepOut = Present
+              isPresent = true;
+            } else if (record.stepIn && !record.stepOut) {
+              // Check if same day
+              const isSameDay = new Date(record.stepIn).toDateString() === targetDate.toDateString();
+              isPresent = isSameDay;
+            }
+            
+            // Only count if present (status === "P")
+            if (isPresent) {
+              if (!uniqueEmployeeDaysByDate.has(dateString)) {
+                uniqueEmployeeDaysByDate.set(dateString, new Set());
+              }
+              uniqueEmployeeDaysByDate.get(dateString)!.add(empId);
+            }
+          }
         });
       });
 
-      const results = await Promise.all(allPromises);
+      // Debug: Log unique counts per date
+      const dateCounts = Array.from(uniqueEmployeeDaysByDate.entries()).map(([date, set]) => ({
+        date,
+        count: set.size
+      }));
+      
+      // Count how many records were filtered out (for debugging)
+      let filteredOutCount = 0;
+      let filteredOutEmpIds = new Set<string>();
+      attendanceArray.forEach((record: any) => {
+        if (!record?.stepIn) return;
+        // Use same extraction logic as in the main loop
+        let empId: string | null = null;
+        if (record?.employeeId) {
+          if (typeof record.employeeId === 'string') {
+            empId = record.employeeId;
+          } else if (record.employeeId._id) {
+            empId = String(record.employeeId._id);
+          }
+        }
+        if (!empId && record?.employee?._id) {
+          empId = String(record.employee._id);
+        }
+        if (empId && !validEmployeeIds.has(String(empId))) {
+          filteredOutCount++;
+          filteredOutEmpIds.add(String(empId));
+        }
+      });
+      
+      console.log("📊 Unique employee-days by date:", dateCounts);
+      const totalUniqueDays = dateCounts.reduce((sum, d) => sum + d.count, 0);
+      console.log("📊 Total unique employee-days (filtered):", totalUniqueDays);
+      console.log("📊 Attendance records filtered out (deleted employees):", filteredOutCount);
+      console.log("📊 Unique employee IDs filtered out:", filteredOutEmpIds.size);
+      console.log("📊 Sample filtered employee IDs:", Array.from(filteredOutEmpIds).slice(0, 5));
+      console.log("📊 Expected match with Muster Roll:", totalUniqueDays === 3267 ? "✅ MATCH" : `❌ DIFFERENCE: ${totalUniqueDays - 3267}`);
       
       // Organize results by date
       const summaries: DailySummary[] = dateRange.map((date, dateIndex) => {
         const dateString = format(date, "yyyy-MM-dd");
         const baseIndex = dateIndex * 3;
         
+        // Get unique employee count for this date
+        const uniqueCount = uniqueEmployeeDaysByDate.get(dateString)?.size || 0;
+        
         return {
           date: dateString,
-          morning: results[baseIndex] && typeof results[baseIndex] === 'object' && results[baseIndex]?.date ? results[baseIndex] as SummaryData : null,
-          evening: results[baseIndex + 1] && typeof results[baseIndex + 1] === 'object' && results[baseIndex + 1]?.date ? results[baseIndex + 1] as SummaryData : null,
-          night: results[baseIndex + 2] && typeof results[baseIndex + 2] === 'object' && results[baseIndex + 2]?.date ? results[baseIndex + 2] as SummaryData : null,
+          morning: shiftPromises[baseIndex] && typeof shiftPromises[baseIndex] === 'object' && shiftPromises[baseIndex]?.date ? shiftPromises[baseIndex] as SummaryData : null,
+          evening: shiftPromises[baseIndex + 1] && typeof shiftPromises[baseIndex + 1] === 'object' && shiftPromises[baseIndex + 1]?.date ? shiftPromises[baseIndex + 1] as SummaryData : null,
+          night: shiftPromises[baseIndex + 2] && typeof shiftPromises[baseIndex + 2] === 'object' && shiftPromises[baseIndex + 2]?.date ? shiftPromises[baseIndex + 2] as SummaryData : null,
+          _uniqueEmployeeDays: uniqueCount, // Store unique count for total calculation
         };
       });
 
@@ -118,22 +323,27 @@ export function SummaryReport() {
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate, getDateRange]);
+      }, [fromDate, toDate, getDateRange, employees, dispatch]);
 
   useEffect(() => {
-    // Auto-fetch when both dates are selected
-    if (fromDate && toDate) {
+    // Auto-fetch when both dates are selected AND employees are loaded
+    // This ensures we have employees list before calculating (same as Muster Roll)
+    if (fromDate && toDate && employees.length > 0) {
       fetchRangeData();
+    } else if (fromDate && toDate && employees.length === 0) {
+      // If employees aren't loaded yet, fetch them first
+      dispatch(fetchEmployees() as any);
     } else {
       setRangeSummaries([]);
     }
-  }, [fromDate, toDate, fetchRangeData]);
+  }, [fromDate, toDate, fetchRangeData, employees.length, dispatch]);
 
   const formatDateForTable = (dateString: string) => {
     return format(new Date(dateString), "dd-MM-yyyy");
   };
 
   // Calculate totals for all dates
+  // This matches Muster Roll Report: sum of all employee present days
   const getTotals = () => {
     let morningTotal = 0;
     let eveningTotal = 0;
@@ -144,15 +354,25 @@ export function SummaryReport() {
       morningTotal += summary.morning?.presentEmployees || 0;
       eveningTotal += summary.evening?.presentEmployees || 0;
       nightTotal += summary.night?.presentEmployees || 0;
+      // Use unique employee-days count - this matches Muster Roll's sum of totals.present
+      // Each employee-day is counted once, matching how Muster Roll counts present days per employee
+      grandTotal += summary._uniqueEmployeeDays || 0;
     });
 
-    grandTotal = morningTotal + eveningTotal + nightTotal;
+    console.log("📊 Summary Report Totals:", {
+      morning: morningTotal,
+      evening: eveningTotal,
+      night: nightTotal,
+      grandTotal: grandTotal,
+      dateRange: rangeSummaries.map(s => s.date),
+      uniqueCounts: rangeSummaries.map(s => ({ date: s.date, count: s._uniqueEmployeeDays }))
+    });
 
     return {
       morning: morningTotal,
       evening: eveningTotal,
       night: nightTotal,
-      total: grandTotal
+      total: grandTotal // Sum of unique employee-days, matching Muster Roll
     };
   };
 
@@ -278,9 +498,8 @@ export function SummaryReport() {
                   morning: summary.morning?.presentEmployees || 0,
                   evening: summary.evening?.presentEmployees || 0,
                   night: summary.night?.presentEmployees || 0,
-                  total: (summary.morning?.presentEmployees || 0) + 
-                         (summary.evening?.presentEmployees || 0) + 
-                         (summary.night?.presentEmployees || 0)
+                  // Use unique employee-days count to match Muster Roll
+                  total: summary._uniqueEmployeeDays || 0
                 };
 
                 return (
@@ -379,9 +598,8 @@ export function SummaryReport() {
                           morning: summary.morning?.presentEmployees || 0,
                           evening: summary.evening?.presentEmployees || 0,
                           night: summary.night?.presentEmployees || 0,
-                          total: (summary.morning?.presentEmployees || 0) + 
-                                 (summary.evening?.presentEmployees || 0) + 
-                                 (summary.night?.presentEmployees || 0)
+                          // Use unique employee-days count to match Muster Roll
+                          total: summary._uniqueEmployeeDays || 0
                         };
 
                         return (
