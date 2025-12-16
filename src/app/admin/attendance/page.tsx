@@ -52,8 +52,11 @@ export default function AttendancePage() {
     async function fetchFilters() {
       setFiltersLoading(true);
       try {
-        const mgrRes = await http<{ data: { name: string; _id: string }[] }>(ENDPOINTS.manager.all);
-        const empRes = await http<{ data: { name: string; _id: string }[] }>(ENDPOINTS.employee.all);
+        // Fetch managers and employees in parallel for faster loading
+        const [mgrRes, empRes] = await Promise.all([
+          http<{ data: { name: string; _id: string }[] }>(ENDPOINTS.manager.all),
+          http<{ data: { name: string; _id: string }[] }>(ENDPOINTS.employee.all)
+        ]);
         setManagers(mgrRes.data || []);
         setEmployees(empRes.data || []);
       } catch (e) {
@@ -66,13 +69,26 @@ export default function AttendancePage() {
     fetchFilters();
   }, []);
 
+  // Set default date range to last 30 days to limit initial data load
+  const getDefaultDateRange = () => {
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 30); // Last 30 days
+    return {
+      startDate: startDate.toISOString().split('T')[0],
+      endDate: endDate.toISOString().split('T')[0],
+    };
+  };
+
+  const defaultDates = getDefaultDateRange();
+  
   const [filters, setFilters] = useState({
     managerId: "",
     employeeId: "",
     shift: "",
     date: undefined as Date | undefined,
-    startDate: undefined as string | undefined,
-    endDate: undefined as string | undefined,
+    startDate: defaultDates.startDate,
+    endDate: defaultDates.endDate,
     order: "desc",
   });
 
@@ -98,11 +114,12 @@ export default function AttendancePage() {
     return () => clearTimeout(timeoutId);
   }, [filters.managerId, filters.employeeId, filters.startDate, filters.endDate, filters.order, fetchAttendanceData]);
 
-  // Initial data fetch
+  // Initial data fetch - only once when authenticated
   useEffect(() => {
     if (isAuthed && !isReadonly) {
       fetchAttendanceData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthed, isReadonly]); // Only run once on mount
 
   if (checking || !isAuthed || isReadonly) {

@@ -6,6 +6,7 @@ import { ReportsFilter } from "@/components/admin/ReportsFilter";
 import { EditReportModal } from "@/components/admin/EditReportModal";
 import { DeleteAttendanceModal } from "@/components/admin/DeleteAttendanceModal";
 import { BulkUpdateModal } from "@/components/admin/BulkUpdateModal";
+import { BulkDeleteModal } from "@/components/admin/BulkDeleteModal";
 import { Button } from "@/components/ui/button";
 import { getApiUrl } from "@/lib/config";
 import { RefreshCw, Edit3, Trash2, CheckSquare, Square } from "lucide-react";
@@ -51,9 +52,8 @@ export function AttendanceManagement({
   const [itemsPerPage, setItemsPerPage] = useState(15);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Helper function to get image URL
-  const getImageUrl = (image: string | undefined) => {
-    if (!image) return undefined;
+  // Helper function to get image URL - memoized to avoid recalculation
+  const getImageUrl = useMemo(() => {
     const apiUrl = getApiUrl();
     let baseUrl = apiUrl;
     
@@ -64,8 +64,12 @@ export function AttendanceManagement({
     }
     
     const cleanBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-    return `${cleanBaseUrl}/static/${image}`;
-  };
+    
+    return (image: string | undefined) => {
+      if (!image) return undefined;
+      return `${cleanBaseUrl}/static/${image}`;
+    };
+  }, []);
 
   // Format attendance data
   const formattedReports = useMemo(() => {
@@ -254,38 +258,63 @@ export function AttendanceManagement({
         </div>
       </CardContent>
 
-      {/* Bulk Update Button */}
+      {/* Bulk Actions Buttons */}
       {selectedIds.length > 0 && (
         <CardContent className="p-4 border-b bg-blue-50 dark:bg-blue-900/20">
-          <BulkUpdateModal
-            selectedIds={selectedIds}
-            onSuccess={() => {
-              setSelectedIds([]);
-              onRefresh();
-            }}
-            currentFilters={{
-              managerId: filters.managerId,
-              employeeId: filters.employeeId,
-              startDate: filters.startDate,
-              endDate: filters.endDate,
-              order: filters.order,
-            }}
-            selectedRecords={selectedIds.map(id => {
-              const report = filteredReports.find(r => r._id === id);
-              return {
-                _id: id,
-                date: report?.date || '',
-                stepIn: report?.clockIn || '',
-                stepOut: report?.clockOut || ''
-              };
-            })}
-            trigger={
-              <Button className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white">
-                <Edit3 className="h-4 w-4 mr-2" />
-                Bulk Update {selectedIds.length} Record{selectedIds.length !== 1 ? 's' : ''}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <BulkUpdateModal
+              selectedIds={selectedIds}
+              onSuccess={() => {
+                setSelectedIds([]);
+                onRefresh();
+              }}
+              currentFilters={{
+                managerId: filters.managerId,
+                employeeId: filters.employeeId,
+                startDate: filters.startDate,
+                endDate: filters.endDate,
+                order: filters.order,
+              }}
+              selectedRecords={selectedIds.map(id => {
+                const report = filteredReports.find(r => r._id === id);
+                return {
+                  _id: id,
+                  date: report?.date || '',
+                  stepIn: report?.clockIn || '',
+                  stepOut: report?.clockOut || ''
+                };
+              })}
+              trigger={
+                <Button className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white">
+                  <Edit3 className="h-4 w-4 mr-2" />
+                  Bulk Update {selectedIds.length} Record{selectedIds.length !== 1 ? 's' : ''}
+                </Button>
+              }
+            />
+            <BulkDeleteModal
+              selectedIds={selectedIds}
+              selectedRecords={selectedIds.map(id => {
+                const report = filteredReports.find(r => r._id === id);
+                return {
+                  _id: id,
+                  employee: report?.employee || 'Unknown',
+                  date: report?.date || ''
+                };
+              })}
+              onSuccess={() => {
+                setSelectedIds([]);
+                onRefresh();
+              }}
+            >
+              <Button 
+                variant="destructive" 
+                className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete {selectedIds.length} Record{selectedIds.length !== 1 ? 's' : ''}
               </Button>
-            }
-          />
+            </BulkDeleteModal>
+          </div>
         </CardContent>
       )}
 
@@ -350,6 +379,7 @@ export function AttendanceManagement({
                               alt={report.employee}
                               className="w-full h-full object-cover"
                               loading="lazy"
+                              decoding="async"
                               onError={(e) => {
                                 e.currentTarget.src = `https://placehold.co/400x400/6366f1/ffffff?text=${report.employee?.charAt(0).toUpperCase() || 'E'}`;
                               }}
@@ -359,6 +389,8 @@ export function AttendanceManagement({
                               src={`https://placehold.co/400x400/6366f1/ffffff?text=${report.employee?.charAt(0).toUpperCase() || 'E'}`}
                               alt={report.employee}
                               className="w-full h-full object-cover"
+                              loading="lazy"
+                              decoding="async"
                             />
                           )}
                         </div>

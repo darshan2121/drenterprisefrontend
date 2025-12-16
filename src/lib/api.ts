@@ -134,6 +134,13 @@ export const updateAttendance = (id: string, body: any) =>
 export const deleteAttendance = (id: string) =>
   http(ENDPOINTS.attendance.single(id), { method: "DELETE" });
 
+// Bulk delete attendance records
+export const bulkDeleteAttendance = async (ids: string[]) => {
+  // Delete all records in parallel
+  const deletePromises = ids.map(id => deleteAttendance(id));
+  return Promise.all(deletePromises);
+};
+
 export const getAttendanceByEmployee = (employeeId: string) =>
   http(ENDPOINTS.attendance.byEmployee(employeeId));
 
