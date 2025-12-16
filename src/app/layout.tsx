@@ -20,6 +20,7 @@ if (
     removeItem: (key: string) => {
       memoryStore.delete(key);
     },
+    
     clear: () => {
       memoryStore.clear();
     },
