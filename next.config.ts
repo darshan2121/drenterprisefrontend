@@ -43,10 +43,6 @@ const nextConfig: NextConfig = {
     // Allow production builds to complete even with type errors
     ignoreBuildErrors: true,
   },
-  eslint: {
-    // Allow production builds to complete even with ESLint errors
-    ignoreDuringBuilds: true,
-  },
   
   // Performance optimizations
   experimental: {
@@ -60,52 +56,15 @@ const nextConfig: NextConfig = {
   },
   
   // Mobile optimizations
-  swcMinify: true, // Use SWC for faster minification
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production' ? {
       exclude: ['error', 'warn'],
     } : false,
   },
   
-  // Bundle optimization
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      // Optimize for mobile - split chunks more aggressively
-      config.optimization = {
-        ...config.optimization,
-        splitChunks: {
-          chunks: 'all',
-          cacheGroups: {
-            default: false,
-            vendors: false,
-            // Vendor chunk for large libraries
-            vendor: {
-              name: 'vendor',
-              chunks: 'all',
-              test: /node_modules/,
-              priority: 20,
-            },
-            // Separate chunk for UI components
-            ui: {
-              name: 'ui',
-              chunks: 'all',
-              test: /[\\/]components[\\/]ui[\\/]/,
-              priority: 10,
-            },
-            // Common chunk
-            common: {
-              name: 'common',
-              minChunks: 2,
-              chunks: 'all',
-              priority: 5,
-              reuseExistingChunk: true,
-            },
-          },
-        },
-      };
-    }
-    return config;
-  },
+  // Bundle optimization - Using Turbopack in Next.js 16
+  // Webpack config removed as Turbopack is default in Next.js 16
+  // Turbopack handles optimization automatically
 };
 
 export default nextConfig;
