@@ -15,6 +15,7 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { EditReportModal } from "@/components/admin/EditReportModal";
 import { DeleteAttendanceModal } from "@/components/admin/DeleteAttendanceModal";
 import { BulkUpdateModal } from "@/components/admin/BulkUpdateModal";
+import { BulkDeleteModal } from "@/components/admin/BulkDeleteModal";
 import { authService } from "@/services/authService";
 import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
@@ -223,6 +224,8 @@ export default function ReportsPage() {
           clockOut: formatISTTime(att.stepOut),
           note: att.note || '',
           totalTime: att.totalTime || '',
+          // Store original stepIn timestamp for deduplication (latest record)
+          _stepInTimestamp: att.stepIn ? new Date(att.stepIn).getTime() : 0,
           // Include raw location data for editing
           _raw: {
             longitude: att.longitude,
@@ -262,20 +265,28 @@ export default function ReportsPage() {
           // Shift filter
           const matchShift = !filters.shift || report.shift === filters.shift;
           
-          // Date filter - handle both date object and string formats
+          // Date filter - handle single date, date range, or both
           let matchDate = true;
+          
+          // Single date filter (exact match) - takes precedence over date range
           if (filters.date) {
             const filterDateStr = format(filters.date, 'yyyy-MM-dd');
             matchDate = report.date === filterDateStr;
+          }
+          // Date range filter (startDate to endDate) - only if single date is not set
+          else if (filters.startDate || filters.endDate) {
+            const reportDate = report.date; // Format: 'yyyy-MM-dd'
             
-            // Debug date filtering
-            console.log('🔍 Date filter debug:', {
-              filterDate: filters.date,
-              filterDateFormatted: filterDateStr,
-              reportDate: report.date,
-              employee: report.employee,
-              matchDate: matchDate
-            });
+            if (filters.startDate && filters.endDate) {
+              // Both dates provided - check if report date is within range
+              matchDate = reportDate >= filters.startDate && reportDate <= filters.endDate;
+            } else if (filters.startDate) {
+              // Only start date - check if report date is on or after start date
+              matchDate = reportDate >= filters.startDate;
+            } else if (filters.endDate) {
+              // Only end date - check if report date is on or before end date
+              matchDate = reportDate <= filters.endDate;
+            }
           }
           
           return matchManager && matchEmployee && matchShift && matchDate;
@@ -285,9 +296,58 @@ export default function ReportsPage() {
         }
       });
       
-      console.log('Filtered reports count:', filtered.length);
-      return filtered;
+      console.log('Filtered reports count (before deduplication):', filtered.length);
+      
+      // Deduplicate: Keep only the latest entry per employee per day
+      const deduplicatedMap = new Map<string, typeof filtered[0]>();
+      
+      filtered.forEach(report => {
+        // Only process records with valid employee ID and date
+        if (report.employeeId?._id && report.date && report.date !== '--') {
+          const key = `${report.employeeId._id}_${report.date}`;
+          const existing = deduplicatedMap.get(key);
+          
+          // If no existing record or this one is newer (later stepIn time), keep this one
+          if (!existing || (report._stepInTimestamp > existing._stepInTimestamp)) {
+            deduplicatedMap.set(key, report);
+          }
+        }
+      });
+      
+      const deduplicated = Array.from(deduplicatedMap.values());
+      console.log('Deduplicated reports count:', deduplicated.length);
+      console.log('Removed duplicates:', filtered.length - deduplicated.length);
+      
+      // Log count by date when date filter is applied
+      if (filters.date || (filters.startDate && filters.endDate && filters.startDate === filters.endDate)) {
+        const targetDate = filters.date ? format(filters.date, 'yyyy-MM-dd') : filters.startDate;
+        const countForDate = deduplicated.filter(r => r.date === targetDate).length;
+        console.log(`📊 ATTENDANCE REPORTS - Date Filter Applied:`);
+        console.log(`   📅 Selected Date: ${targetDate}`);
+        console.log(`   👥 Employee Count: ${countForDate}`);
+        console.log(`   📋 Total Records: ${deduplicated.length}`);
+        console.log(`   ⚠️ This count should match Muster Roll for the same date!`);
+      } else if (filters.startDate && filters.endDate) {
+        // Date range - count per day
+        const countsByDate: Record<string, number> = {};
+        deduplicated.forEach(report => {
+          if (report.date && report.date !== '--') {
+            countsByDate[report.date] = (countsByDate[report.date] || 0) + 1;
+          }
+        });
+        console.log(`📊 ATTENDANCE REPORTS - Date Range Filter Applied:`);
+        console.log(`   📅 Date Range: ${filters.startDate} to ${filters.endDate}`);
+        console.log(`   📊 Counts by Date:`, countsByDate);
+        console.log(`   👥 Total Unique Employees: ${deduplicated.length}`);
+      }
+      
+      return deduplicated;
     }, [formattedReports, filters, employees, managers, attendanceList]); // Removed dataVersion dependency
+
+    // Calculate unique employee-days count (should match filteredReports.length after deduplication)
+    const uniqueEmployeeDaysCount = useMemo(() => {
+      return filteredReports.length; // After deduplication, this is already unique
+    }, [filteredReports]);
     
     // Pagination calculations
     const totalPages = Math.ceil(filteredReports.length / itemsPerPage);
@@ -357,6 +417,10 @@ export default function ReportsPage() {
                   onEmployeeChange={(id) => setFilters((f) => ({ ...f, employeeId: id }))}
                   onShiftChange={(shift) => setFilters((f) => ({ ...f, shift }))}
                   onDateChange={(date) => setFilters((f) => ({ ...f, date }))}
+                  onStartDateChange={(date) => setFilters((f) => ({ ...f, startDate: date }))}
+                  onEndDateChange={(date) => setFilters((f) => ({ ...f, endDate: date }))}
+                  startDate={filters.startDate}
+                  endDate={filters.endDate}
                 />
               </div>
             )}
@@ -389,10 +453,25 @@ export default function ReportsPage() {
                   <div className="p-4 space-y-3">
                                                                 {/* Reports Header */}
                       <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                            Reports ({filteredReports.length}) {totalPages > 1 && `- Page ${currentPage} of ${totalPages}`}
-                          </h3>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <div className="flex flex-col">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                              Reports ({filteredReports.length}) {totalPages > 1 && `- Page ${currentPage} of ${totalPages}`}
+                            </h3>
+                            {(filters.startDate || filters.endDate || filters.date) && (
+                              <span className="text-xs text-muted-foreground mt-1">
+                                {filters.date 
+                                  ? `Date: ${format(filters.date, 'MMM dd, yyyy')}`
+                                  : filters.startDate && filters.endDate
+                                  ? `Date Range: ${format(new Date(filters.startDate), 'MMM dd, yyyy')} - ${format(new Date(filters.endDate), 'MMM dd, yyyy')}`
+                                  : filters.startDate
+                                  ? `From: ${format(new Date(filters.startDate), 'MMM dd, yyyy')}`
+                                  : filters.endDate
+                                  ? `To: ${format(new Date(filters.endDate), 'MMM dd, yyyy')}`
+                                  : ''}
+                              </span>
+                            )}
+                          </div>
                           {selectedIds.length > 0 && (
                             <span className="text-sm text-blue-600 dark:text-blue-400 font-medium bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded">
                               {selectedIds.length} selected
@@ -479,9 +558,9 @@ export default function ReportsPage() {
                         </div>
                       </div>
                       
-                      {/* Full Width Bulk Update Button */}
+                      {/* Full Width Bulk Action Buttons */}
                       {selectedIds.length > 0 && !isReadonly && (
-                        <div className="mb-4">
+                        <div className="mb-4 flex flex-col sm:flex-row gap-2">
                           <BulkUpdateModal
                             selectedIds={selectedIds}
                             onSuccess={() => {
@@ -505,12 +584,32 @@ export default function ReportsPage() {
                               };
                             })}
                             trigger={
-                              <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 touch-button shadow-sm">
+                              <button className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 touch-button shadow-sm">
                                 <Edit3 className="h-4 w-4" />
                                 Bulk Update {selectedIds.length} Record{selectedIds.length !== 1 ? 's' : ''}
                               </button>
                             }
                           />
+                          <BulkDeleteModal
+                            selectedIds={selectedIds}
+                            selectedRecords={selectedIds.map(id => {
+                              const report = filteredReports.find(r => r._id === id);
+                              return {
+                                _id: id,
+                                employee: report?.employee || 'Unknown',
+                                date: report?.date || ''
+                              };
+                            })}
+                            onSuccess={() => {
+                              setSelectedIds([]);
+                              handleRefresh();
+                            }}
+                          >
+                            <button className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 touch-button shadow-sm">
+                              <Trash2 className="h-4 w-4" />
+                              Bulk Delete {selectedIds.length} Record{selectedIds.length !== 1 ? 's' : ''}
+                            </button>
+                          </BulkDeleteModal>
                         </div>
                       )}
                     
@@ -681,9 +780,9 @@ export default function ReportsPage() {
                           </div>
                         ))}
                         
-                        {/* Mobile Bulk Update Button */}
+                        {/* Mobile Bulk Action Buttons */}
                         {selectedIds.length > 0 && !isReadonly && (
-                          <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                          <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 space-y-2">
                             <BulkUpdateModal
                               selectedIds={selectedIds}
                               onSuccess={() => {
@@ -713,6 +812,26 @@ export default function ReportsPage() {
                                 </button>
                               }
                             />
+                            <BulkDeleteModal
+                              selectedIds={selectedIds}
+                              selectedRecords={selectedIds.map(id => {
+                                const report = filteredReports.find(r => r._id === id);
+                                return {
+                                  _id: id,
+                                  employee: report?.employee || 'Unknown',
+                                  date: report?.date || ''
+                                };
+                              })}
+                              onSuccess={() => {
+                                setSelectedIds([]);
+                                handleRefresh();
+                              }}
+                            >
+                              <button className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-4 rounded-lg transition-colors touch-button">
+                                <Trash2 className="inline mr-2 h-4 w-4" />
+                                Bulk Delete {selectedIds.length} Record{selectedIds.length !== 1 ? 's' : ''}
+                              </button>
+                            </BulkDeleteModal>
                           </div>
                         )}
                       </div>
@@ -840,6 +959,14 @@ export default function ReportsPage() {
                     onRefresh={handleRefresh} 
                     disableActions={isReadonly}
                     loading={isLoading || isUpdating}
+                    totalCount={filteredReports.length}
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    dateFilter={{
+                      date: filters.date,
+                      startDate: filters.startDate,
+                      endDate: filters.endDate,
+                    }}
                     filters={{
                       managerId: filters.managerId,
                       employeeId: filters.employeeId,

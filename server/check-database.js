@@ -118,3 +118,4 @@ const checkDatabase = async () => {
 // Run the check
 checkDatabase().catch(console.error);
 
+

@@ -9,9 +9,13 @@ import { BulkUpdateModal } from "@/components/admin/BulkUpdateModal";
 import { BulkDeleteModal } from "@/components/admin/BulkDeleteModal";
 import { Button } from "@/components/ui/button";
 import { getApiUrl } from "@/lib/config";
-import { RefreshCw, Edit3, Trash2, CheckSquare, Square } from "lucide-react";
+import { RefreshCw, Edit3, Trash2, CheckSquare, Square, FileDown } from "lucide-react";
 import { CardContent } from "@/components/ui/card";
+import { PDFDownloadButton } from "@/components/ui/pdf-download-button";
 import { DebouncedSearch } from "@/components/ui/debounced-search";
+
+// Lazy load XLSX only when needed
+const loadXLSX = () => import("xlsx").then(mod => mod.default || mod);
 import {
   Select,
   SelectContent,
@@ -217,7 +221,58 @@ export function AttendanceManagement({
               </span>
             )}
           </div>
-          <div className="flex gap-2 items-center w-full sm:w-auto">
+          <div className="flex gap-2 items-center w-full sm:w-auto flex-wrap">
+            {/* Download Buttons */}
+            <PDFDownloadButton
+              reports={filteredReports.length > 0 ? filteredReports : currentReports}
+              allReports={filteredReports}
+              fileName={`attendance-report-${new Date().toISOString().split('T')[0]}.pdf`}
+              showProgress={true}
+              includeImages={true}
+              quality="high"
+              variant="outline"
+              size="sm"
+              onSuccess={() => {
+                console.log('✅ Attendance PDF download completed successfully');
+              }}
+              onError={(error: Error) => {
+                console.error('❌ Attendance PDF download failed:', error);
+              }}
+            >
+              <FileDown className="mr-2 h-4 w-4" />
+              PDF
+            </PDFDownloadButton>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                try {
+                  const XLSX = await loadXLSX();
+                  const worksheet = XLSX.utils.json_to_sheet(
+                    filteredReports.map((report) => ({
+                      Date: report.date,
+                      Employee: report.employee,
+                      Shift: report.shift,
+                      Location: report.location,
+                      Status: report.status,
+                      "Clock In": report.clockIn,
+                      "Clock Out": report.clockOut,
+                      "Total Time": report.totalTime || '--',
+                    }))
+                  );
+                  const workbook = XLSX.utils.book_new();
+                  XLSX.utils.book_append_sheet(workbook, worksheet, "Attendance");
+                  const filename = `attendance-report-${new Date().toISOString().split('T')[0]}.xlsx`;
+                  XLSX.writeFile(workbook, filename);
+                } catch (error) {
+                  console.error('Error exporting to Excel:', error);
+                }
+              }}
+              disabled={isLoading || filteredReports.length === 0}
+            >
+              <FileDown className="mr-2 h-4 w-4" />
+              Excel
+            </Button>
             <Select
               value={itemsPerPage === -1 ? "all" : itemsPerPage.toString()}
               onValueChange={(value) => {

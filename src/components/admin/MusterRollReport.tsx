@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { CalendarDays, FileDown, FileType2, RefreshCcw, Search } from "lucide-react";
 
@@ -99,6 +99,9 @@ export function MusterRollReport() {
     dispatch(fetchEmployees());
   }, [dispatch]);
 
+  // Track previous attendance IDs to detect deletions
+  const prevAttendanceIdsRef = useRef<Set<string>>(new Set());
+
   // Fetch attendance whenever month/year changes
   useEffect(() => {
     const startDate = new Date(selectedYear, selectedMonth, 1)
@@ -110,6 +113,48 @@ export function MusterRollReport() {
 
     dispatch(fetchAttendance({ startDate, endDate, order: "asc" }));
   }, [dispatch, selectedMonth, selectedYear]);
+
+  // Track if we need to force refresh (when deletions detected)
+  const [forceRefresh, setForceRefresh] = useState(false);
+
+  // Refresh attendance when records are deleted (detect by ID changes or attendanceList updates)
+  useEffect(() => {
+    const currentIds = new Set(attendanceArray.map((record: any) => record._id || record.id).filter(Boolean));
+    const prevIds = prevAttendanceIdsRef.current;
+    
+    // Check if any IDs from previous state are missing (deletions)
+    const deletedIds = Array.from(prevIds).filter(id => !currentIds.has(id));
+    
+    // If deletions detected and we had previous data, force refresh
+    if (deletedIds.length > 0 && prevIds.size > 0) {
+      console.log(`🔄 Muster Roll: Detected ${deletedIds.length} deletion(s), forcing refresh...`, deletedIds);
+      setForceRefresh(true);
+    }
+    
+    // Update ref with current IDs
+    prevAttendanceIdsRef.current = currentIds;
+  }, [attendanceList, attendanceArray]);
+
+  // Force refresh when deletions are detected
+  useEffect(() => {
+    if (forceRefresh) {
+      console.log('🔄 Muster Roll: Executing forced refresh...');
+      const startDate = new Date(selectedYear, selectedMonth, 1)
+        .toISOString()
+        .split("T")[0];
+      const endDate = new Date(selectedYear, selectedMonth + 1, 0)
+        .toISOString()
+        .split("T")[0];
+      // Add timestamp to force fresh fetch (bypass cache)
+      const timestamp = Date.now();
+      dispatch(fetchAttendance({ startDate, endDate, order: "asc" }) as any).then(() => {
+        console.log('✅ Muster Roll: Refresh completed, map should rebuild');
+        // Reset the ref to track new state
+        prevAttendanceIdsRef.current = new Set();
+      });
+      setForceRefresh(false);
+    }
+  }, [forceRefresh, dispatch, selectedMonth, selectedYear]);
 
   const daysInMonth = useMemo(() => {
     return new Date(selectedYear, selectedMonth + 1, 0).getDate();
@@ -126,29 +171,61 @@ export function MusterRollReport() {
   }, [daysInMonth, customStart, customEnd]);
 
   // Only keep attendance for the selected month/year
+  // IMPORTANT: Filter out records without valid IDs (deleted records)
   const monthlyAttendance = useMemo(() => {
-    return attendanceArray.filter((record: any) => {
+    const filtered = attendanceArray.filter((record: any) => {
+      // Skip records without valid IDs (deleted records)
+      if (!record?._id && !record?.id) {
+        return false;
+      }
       if (!record?.stepIn) return false;
       const date = new Date(record.stepIn);
       return (
         date.getMonth() === selectedMonth && date.getFullYear() === selectedYear
       );
     });
+    console.log(`📊 Filtered monthlyAttendance: ${attendanceArray.length} -> ${filtered.length} records (removed ${attendanceArray.length - filtered.length} invalid/deleted)`);
+    return filtered;
   }, [attendanceArray, selectedMonth, selectedYear]);
 
   // Build quick lookup map: `${employeeId}_${yyyy-mm-dd}` -> record
-  const attendanceMap = useMemo(() => {
+  // Keep only the LATEST record per employee per day (matching Attendance Reports logic)
+  // IMPORTANT: Only include records that actually exist (have valid _id)
+  // Also return a version number so React can detect changes to the Map
+  const { attendanceMap, mapVersion } = useMemo(() => {
     const map = new Map<string, any>();
+    console.log(`📊 Building attendanceMap from ${monthlyAttendance.length} records`);
+    
     monthlyAttendance.forEach((record: any) => {
+      // Skip records without valid IDs (deleted records might have null/undefined _id)
+      if (!record?._id && !record?.id) {
+        console.warn('⚠️ Skipping record without ID:', record);
+        return;
+      }
+      
       const empId =
         record?.employeeId?._id || record?.employeeId || record?.employee?._id;
       const keyDate = record?.stepIn
         ? new Date(record.stepIn).toISOString().split("T")[0]
         : null;
       if (!empId || !keyDate) return;
-      map.set(`${empId}_${keyDate}`, record);
+      
+      const key = `${empId}_${keyDate}`;
+      const existing = map.get(key);
+      
+      // Get timestamps for comparison
+      const recordTimestamp = record?.stepIn ? new Date(record.stepIn).getTime() : 0;
+      const existingTimestamp = existing?.stepIn ? new Date(existing.stepIn).getTime() : 0;
+      
+      // Keep only the latest record (newer stepIn time)
+      if (!existing || recordTimestamp > existingTimestamp) {
+        map.set(key, record);
+      }
     });
-    return map;
+    
+    console.log(`✅ Built attendanceMap with ${map.size} unique employee-days`);
+    // Return map version (size) so React can detect changes
+    return { attendanceMap: map, mapVersion: map.size };
   }, [monthlyAttendance]);
 
   const getStatusFromRecord = (record: any, targetDate: Date): AttendanceStatus => {
@@ -181,7 +258,8 @@ export function MusterRollReport() {
   };
 
   const getAttendanceStatus = (employeeId: string, day: number): AttendanceStatus => {
-    const date = new Date(selectedYear, selectedMonth, day);
+    // Use UTC date to avoid timezone issues - match the format used in attendanceMap
+    const date = new Date(Date.UTC(selectedYear, selectedMonth, day));
     const dateString = date.toISOString().split("T")[0];
     const record = attendanceMap.get(`${employeeId}_${dateString}`);
     return getStatusFromRecord(record, date);
@@ -189,7 +267,8 @@ export function MusterRollReport() {
 
   // Get attendance record for a specific employee and day
   const getAttendanceRecord = (employeeId: string, day: number) => {
-    const date = new Date(selectedYear, selectedMonth, day);
+    // Use UTC date to avoid timezone issues - match the format used in attendanceMap
+    const date = new Date(Date.UTC(selectedYear, selectedMonth, day));
     const dateString = date.toISOString().split("T")[0];
     return attendanceMap.get(`${employeeId}_${dateString}`);
   };
@@ -217,6 +296,7 @@ export function MusterRollReport() {
       string,
       { present: number; absent: number; weekoff: number; total: number }
     > = {};
+    let totalPresentDays = 0;
     employees.forEach((emp: any) => {
       let present = 0;
       let absent = 0;
@@ -233,18 +313,146 @@ export function MusterRollReport() {
         weekoff,
         total: present + absent + weekoff,
       };
+      totalPresentDays += present;
     });
+    console.log(`📊 Calculated totalsByEmployee: ${totalPresentDays} total present days from ${employees.length} employees (mapVersion: ${mapVersion})`);
     return totals;
-  }, [employees, daysInMonth, attendanceMap, selectedMonth, selectedYear]);
+  }, [employees, dateHeaders, attendanceMap, mapVersion, selectedMonth, selectedYear]);
 
   const dailyPresentTotals = useMemo(() => {
-    return dateHeaders.map((day) => {
+    const totals = dateHeaders.map((day) => {
       return employees.reduce((sum, emp: any) => {
         const status = getAttendanceStatus(emp._id, day).code;
         return sum + (status === "P" ? 1 : 0);
       }, 0);
     });
-  }, [dateHeaders, employees, attendanceMap, selectedMonth, selectedYear]);
+    
+    // Create detailed count by date for ALL days in the month (not just filtered dateHeaders)
+    // This ensures we can look up any date even if it's not in the current filter
+    const countsByDate: Record<string, number> = {};
+    const allDaysInMonth = Array.from({ length: daysInMonth }, (_, idx) => idx + 1);
+    allDaysInMonth.forEach((day) => {
+      // Use UTC date to match attendanceMap key format (consistent with getAttendanceStatus)
+      const date = new Date(Date.UTC(selectedYear, selectedMonth, day));
+      const dateStr = date.toISOString().split("T")[0];
+      // Calculate count for this day
+      const count = employees.reduce((sum, emp: any) => {
+        const status = getAttendanceStatus(emp._id, day).code;
+        return sum + (status === "P" ? 1 : 0);
+      }, 0);
+      countsByDate[dateStr] = count;
+    });
+    
+    console.log(`📊 MUSTER ROLL - Daily Present Totals Calculated:`);
+    console.log(`   📅 Month/Year: ${selectedMonth + 1}/${selectedYear}`);
+    console.log(`   📊 Counts by Date:`, countsByDate);
+    console.log(`   👥 Total Present Days (filtered range): ${totals.reduce((sum, count) => sum + count, 0)}`);
+    console.log(`   📋 Map Version: ${mapVersion}`);
+    console.log(`   ⚠️ These counts should match Attendance Reports for the same dates!`);
+    
+    // If custom date range is selected, log specific date counts
+    if (customStart || customEnd) {
+      const startDate = customStart ? new Date(customStart).toISOString().split("T")[0] : null;
+      const endDate = customEnd ? new Date(customEnd).toISOString().split("T")[0] : null;
+      if (startDate && endDate && startDate === endDate) {
+        const countForDate = countsByDate[startDate] || 0;
+        
+        // Debug: Check what's in attendanceMap for this date
+        const recordsForDate = Array.from(attendanceMap.values()).filter((r: any) => {
+          const rDate = r?.stepIn ? new Date(r.stepIn).toISOString().split("T")[0] : null;
+          return rDate === startDate;
+        });
+        
+        // Debug: Check which employees have records for this date
+        const employeeIdsForDate = new Set(
+          recordsForDate.map((r: any) => r?.employeeId?._id || r?.employeeId || r?.employee?._id).filter(Boolean)
+        );
+        
+        // Debug: Check which employees are marked as Present for this date
+        const dateObj = new Date(startDate + 'T00:00:00Z'); // Parse as UTC
+        const dayNumber = dateObj.getUTCDate();
+        const monthNumber = dateObj.getUTCMonth();
+        const yearNumber = dateObj.getUTCFullYear();
+        
+        // Check if the date is in the current selected month/year
+        if (monthNumber !== selectedMonth || yearNumber !== selectedYear) {
+          console.warn(`⚠️ Selected date ${startDate} is not in current month ${selectedMonth + 1}/${selectedYear}`);
+        }
+        
+        const employeesPresent = employees.filter((emp: any) => {
+          const status = getAttendanceStatus(emp._id, dayNumber).code;
+          return status === "P";
+        });
+        
+        // Debug: Check which employees have records but aren't marked Present
+        const employeesWithRecordsButNotPresent = employees.filter((emp: any) => {
+          const hasRecord = employeeIdsForDate.has(emp._id);
+          const status = getAttendanceStatus(emp._id, dayNumber).code;
+          return hasRecord && status !== "P";
+        });
+        
+        // Debug: Check which employees are marked Present but don't have records
+        const employeesPresentButNoRecord = employees.filter((emp: any) => {
+          const hasRecord = employeeIdsForDate.has(emp._id);
+          const status = getAttendanceStatus(emp._id, dayNumber).code;
+          return !hasRecord && status === "P";
+        });
+        
+        console.log(`📊 MUSTER ROLL - Single Date Selected:`);
+        console.log(`   📅 Selected Date: ${startDate}`);
+        console.log(`   📅 Day Number: ${dayNumber} (Month: ${monthNumber + 1}, Year: ${yearNumber})`);
+        console.log(`   👥 Employee Count (calculated): ${countForDate}`);
+        console.log(`   📋 Total Records in attendanceMap for this date: ${recordsForDate.length}`);
+        console.log(`   👤 Unique Employee IDs in records: ${employeeIdsForDate.size}`);
+        console.log(`   ✅ Employees marked as Present: ${employeesPresent.length}`);
+        console.log(`   ⚠️ Employees with records but NOT marked Present: ${employeesWithRecordsButNotPresent.length}`);
+        console.log(`   ⚠️ Employees marked Present but NO record: ${employeesPresentButNoRecord.length}`);
+        
+        if (employeesPresentButNoRecord.length > 0) {
+          console.warn(`⚠️ ROOT CAUSE: ${employeesPresentButNoRecord.length} employees marked Present without records!`);
+          console.warn(`   These employees are being counted incorrectly.`);
+          console.warn(`   Sample employees:`, employeesPresentButNoRecord.slice(0, 5).map((e: any) => ({
+            name: e.name,
+            id: e._id,
+            lookupKey: `${e._id}_${startDate}`,
+            hasInMap: attendanceMap.has(`${e._id}_${startDate}`)
+          })));
+          
+          // Check what date they're actually matching
+          employeesPresentButNoRecord.slice(0, 3).forEach((emp: any) => {
+            const lookupKey = `${emp._id}_${startDate}`;
+            const record = attendanceMap.get(lookupKey);
+            console.warn(`   Employee ${emp.name}:`, {
+              lookupKey,
+              foundRecord: !!record,
+              recordDate: record?.stepIn ? new Date(record.stepIn).toISOString().split("T")[0] : null,
+              // Check all records for this employee
+              allRecords: Array.from(attendanceMap.entries())
+                .filter(([key]) => key.startsWith(emp._id + '_'))
+                .map(([key, val]: [string, any]) => ({
+                  key,
+                  date: val?.stepIn ? new Date(val.stepIn).toISOString().split("T")[0] : null
+                }))
+            });
+          });
+        }
+        
+        console.log(`   ⚠️ This should match Attendance Reports count for ${startDate}!`);
+        
+        if (countForDate === 0 && recordsForDate.length > 0) {
+          console.warn(`⚠️ ISSUE: Found ${recordsForDate.length} records but count is 0!`);
+          console.warn(`   This suggests a date matching problem.`);
+          console.warn(`   Sample record dates:`, recordsForDate.slice(0, 3).map((r: any) => ({
+            stepIn: r?.stepIn,
+            dateStr: r?.stepIn ? new Date(r.stepIn).toISOString().split("T")[0] : null,
+            employeeId: r?.employeeId?._id || r?.employeeId
+          })));
+        }
+      }
+    }
+    
+    return totals;
+  }, [dateHeaders, employees, attendanceMap, mapVersion, selectedMonth, selectedYear, customStart, customEnd, daysInMonth]);
 
   const filteredEmployees = useMemo(() => {
     if (!searchTerm) return employees;
@@ -339,7 +547,28 @@ export function MusterRollReport() {
       ];
     });
 
-    return { headers, rows };
+    // Add footer row with totals (TOTAL EMPLOYEES row)
+    // Structure: [Sr, Name, Designation, Shift, ...dailyTotals, Present, Total]
+    const totalPresent = filteredEmployees.reduce((sum, emp: any) => {
+      const totals = totalsByEmployee[emp._id];
+      return sum + (totals?.present || 0);
+    }, 0);
+    const totalDays = filteredEmployees.reduce((sum, emp: any) => {
+      const totals = totalsByEmployee[emp._id];
+      return sum + (totals?.total || 0);
+    }, 0);
+    
+    const footerRow = [
+      "TOTAL EMPLOYEES",
+      "",
+      "",
+      "",
+      ...dailyPresentTotals.map((count) => count),
+      totalPresent,
+      totalDays, // This is the Total column value
+    ];
+
+    return { headers, rows: [...rows, footerRow] };
   };
 
   const handleExportExcel = async () => {

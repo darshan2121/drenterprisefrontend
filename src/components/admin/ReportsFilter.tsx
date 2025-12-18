@@ -29,30 +29,69 @@ type Props = {
     onEmployeeChange?: (id: string) => void;
     onShiftChange?: (shift: string) => void;
     onDateChange?: (date: Date | undefined) => void;
+    onStartDateChange?: (date: string | undefined) => void;
+    onEndDateChange?: (date: string | undefined) => void;
+    startDate?: string;
+    endDate?: string;
 }
 
-export function ReportsFilter({ employees, managers, onManagerChange, onEmployeeChange, onShiftChange, onDateChange }: Props) {
+export function ReportsFilter({ 
+    employees, 
+    managers, 
+    onManagerChange, 
+    onEmployeeChange, 
+    onShiftChange, 
+    onDateChange,
+    onStartDateChange,
+    onEndDateChange,
+    startDate,
+    endDate
+}: Props) {
     const [date, setDate] = React.useState<Date>();
     const [selectedManager, setSelectedManager] = React.useState<string>("");
     const [selectedEmployee, setSelectedEmployee] = React.useState<string>("");
     const [selectedShift, setSelectedShift] = React.useState<string>("");
+    const [fromDate, setFromDate] = React.useState<Date | undefined>(startDate ? new Date(startDate) : undefined);
+    const [toDate, setToDate] = React.useState<Date | undefined>(endDate ? new Date(endDate) : undefined);
     const isMobile = useIsMobile();
+    
+    // Sync with props when they change
+    React.useEffect(() => {
+        if (startDate) {
+            setFromDate(new Date(startDate));
+        } else {
+            setFromDate(undefined);
+        }
+    }, [startDate]);
+    
+    React.useEffect(() => {
+        if (endDate) {
+            setToDate(new Date(endDate));
+        } else {
+            setToDate(undefined);
+        }
+    }, [endDate]);
   
     const handleClear = () => {
       setDate(undefined);
       setSelectedManager("");
       setSelectedEmployee("");
       setSelectedShift("");
+      setFromDate(undefined);
+      setToDate(undefined);
       onManagerChange?.("");
       onEmployeeChange?.("");
       onShiftChange?.("");
       onDateChange?.(undefined);
+      onStartDateChange?.(undefined);
+      onEndDateChange?.(undefined);
     };
   
     return (
       <>
         <CardContent className="p-2 sm:p-4 md:p-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2 sm:gap-3 md:gap-4">
+            {/* Single Date Picker */}
             <Popover>
               <PopoverTrigger asChild>
                 <Button
@@ -73,6 +112,60 @@ export function ReportsFilter({ employees, managers, onManagerChange, onEmployee
                   onSelect={(d) => {
                     setDate(d);
                     onDateChange?.(d);
+                  }}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+            
+            {/* From Date Picker */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant={"outline"}
+                  className={cn(
+                    "w-full justify-start text-left font-normal h-10 sm:h-9 text-sm sm:text-base",
+                    !fromDate && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {fromDate ? format(fromDate, "PPP") : <span>From Date</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align={isMobile ? "center" : "start"}>
+                <Calendar
+                  mode="single"
+                  selected={fromDate}
+                  onSelect={(d) => {
+                    setFromDate(d);
+                    onStartDateChange?.(d ? format(d, "yyyy-MM-dd") : undefined);
+                  }}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+            
+            {/* To Date Picker */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant={"outline"}
+                  className={cn(
+                    "w-full justify-start text-left font-normal h-10 sm:h-9 text-sm sm:text-base",
+                    !toDate && "text-muted-foreground"
+                  )}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {toDate ? format(toDate, "PPP") : <span>To Date</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align={isMobile ? "center" : "start"}>
+                <Calendar
+                  mode="single"
+                  selected={toDate}
+                  onSelect={(d) => {
+                    setToDate(d);
+                    onEndDateChange?.(d ? format(d, "yyyy-MM-dd") : undefined);
                   }}
                   initialFocus
                 />

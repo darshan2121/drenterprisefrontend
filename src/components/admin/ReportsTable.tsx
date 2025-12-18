@@ -16,11 +16,13 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { FileDown, RefreshCw, Loader2, Check, CheckCircle, Download, Trash2 } from "lucide-react";
 import { EditReportModal } from "./EditReportModal";
 import { BulkUpdateModal } from "@/components/admin/BulkUpdateModal";
+import { BulkDeleteModal } from "@/components/admin/BulkDeleteModal";
 import { DeleteAttendanceModal } from "./DeleteAttendanceModal";
 import { PDFDownloadButton } from "@/components/ui/pdf-download-button";
 import { pdfDownloadService } from "@/services/pdfDownloadService";
 import { useState, useEffect } from "react";
 import { getApiUrl } from "@/lib/config";
+import { format } from "date-fns";
 
 // Lazy load heavy libraries
 const loadXLSX = () => import("xlsx").then(mod => mod.default || mod);
@@ -215,6 +217,11 @@ export function ReportsTable({
   loading = false,
   disableActions = false,
   filters,
+  totalCount,
+  totalRecords,
+  currentPage,
+  totalPages,
+  dateFilter,
 }: {
   reports: Report[];
   allReports?: Report[]; // Optional prop for PDF generation
@@ -228,6 +235,15 @@ export function ReportsTable({
     endDate?: string;
     order?: string;
     shift?: string;
+  };
+  totalCount?: number;
+  totalRecords?: number;
+  currentPage?: number;
+  totalPages?: number;
+  dateFilter?: {
+    date?: Date;
+    startDate?: string;
+    endDate?: string;
   };
 }) {
   const isMobile = useIsMobile();
@@ -735,34 +751,57 @@ export function ReportsTable({
     }
   };
 
-  // Add bulk edit button to header actions when reports are selected
+  // Add bulk edit and delete buttons to header actions when reports are selected
   const EnhancedHeaderActions = () => (
     <div className="flex items-center gap-2">
       {isBulkEditAvailable && selectedReports.length > 0 && (
-        <BulkUpdateModal
-          selectedIds={selectedReports}
-          onSuccess={() => handleBulkEditComplete(true)}
-          currentFilters={filters || {}}
-          selectedRecords={selectedReports.map(id => {
-            const report = reports.find(r => r._id === id || r.id === id);
-            return {
-              _id: id,
-              date: report?.date || '',
-              stepIn: report?.clockIn || '',
-              stepOut: report?.clockOut || ''
-            };
-          })}
-          trigger={
+        <>
+          <BulkUpdateModal
+            selectedIds={selectedReports}
+            onSuccess={() => handleBulkEditComplete(true)}
+            currentFilters={filters || {}}
+            selectedRecords={selectedReports.map(id => {
+              const report = reports.find(r => r._id === id || r.id === id);
+              return {
+                _id: id,
+                date: report?.date || '',
+                stepIn: report?.clockIn || '',
+                stepOut: report?.clockOut || ''
+              };
+            })}
+            trigger={
+              <Button 
+                variant="default" 
+                size="sm" 
+                disabled={loading}
+              >
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Bulk Edit ({selectedReports.length})
+              </Button>
+            }
+          />
+          <BulkDeleteModal
+            selectedIds={selectedReports}
+            selectedRecords={selectedReports.map(id => {
+              const report = reports.find(r => r._id === id || r.id === id);
+              return {
+                _id: id,
+                employee: report?.employee || 'Unknown',
+                date: report?.date || ''
+              };
+            })}
+            onSuccess={() => handleBulkEditComplete(true)}
+          >
             <Button 
-              variant="default" 
+              variant="destructive" 
               size="sm" 
               disabled={loading}
             >
-              <CheckCircle className="mr-2 h-4 w-4" />
-              Bulk Edit ({selectedReports.length})
+              <Trash2 className="mr-2 h-4 w-4" />
+              Bulk Delete ({selectedReports.length})
             </Button>
-          }
-        />
+          </BulkDeleteModal>
+        </>
       )}
       <HeaderActions 
         onDownloadPdf={handleDownloadPdf} 
@@ -1001,7 +1040,24 @@ export function ReportsTable({
   return (
     <>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Results</CardTitle>
+        <div className="flex flex-col">
+          <CardTitle>
+            Results {totalCount !== undefined && `(${totalCount})`} {totalPages && totalPages > 1 && `- Page ${currentPage} of ${totalPages}`}
+          </CardTitle>
+          {dateFilter && (dateFilter.date || dateFilter.startDate || dateFilter.endDate) && (
+            <span className="text-xs text-muted-foreground mt-1">
+              {dateFilter.date 
+                ? `Date: ${format(dateFilter.date, 'MMM dd, yyyy')}`
+                : dateFilter.startDate && dateFilter.endDate
+                ? `Date Range: ${format(new Date(dateFilter.startDate), 'MMM dd, yyyy')} - ${format(new Date(dateFilter.endDate), 'MMM dd, yyyy')}`
+                : dateFilter.startDate
+                ? `From: ${format(new Date(dateFilter.startDate), 'MMM dd, yyyy')}`
+                : dateFilter.endDate
+                ? `To: ${format(new Date(dateFilter.endDate), 'MMM dd, yyyy')}`
+                : ''}
+            </span>
+          )}
+        </div>
         <EnhancedHeaderActions />
       </CardHeader>
       <CardContent className="p-0">

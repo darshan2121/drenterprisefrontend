@@ -2,7 +2,17 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { format, eachDayOfInterval, startOfDay, endOfDay, isSameDay } from "date-fns";
-import { Calendar as CalendarIcon, RefreshCw, Loader2 } from "lucide-react";
+import { Calendar as CalendarIcon, RefreshCw, Loader2, FileDown } from "lucide-react";
+
+// Lazy load heavy libraries only when needed
+const loadXLSX = () => import("xlsx").then(mod => mod.default || mod);
+const loadPDF = async () => {
+  const [jsPDF, autoTable] = await Promise.all([
+    import("jspdf").then(mod => mod.default),
+    import("jspdf-autotable").then(mod => mod.default)
+  ]);
+  return { jsPDF, autoTable };
+};
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -379,6 +389,132 @@ export function SummaryReport() {
   const totals = getTotals();
   const dateRange = getDateRange();
 
+  // Excel Export Handler
+  const handleExportExcel = async () => {
+    if (rangeSummaries.length === 0) {
+      return;
+    }
+
+    try {
+      const XLSX = await loadXLSX();
+      
+      // Prepare data for Excel
+      const excelData = rangeSummaries.map((summary) => ({
+        Date: formatDateForTable(summary.date),
+        Morning: summary.morning?.presentEmployees || 0,
+        Evening: summary.evening?.presentEmployees || 0,
+        Night: summary.night?.presentEmployees || 0,
+        Total: summary._uniqueEmployeeDays || 0,
+      }));
+
+      // Add totals row
+      excelData.push({
+        Date: "TOTAL",
+        Morning: totals.morning,
+        Evening: totals.evening,
+        Night: totals.night,
+        Total: totals.total,
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(excelData);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Summary Report");
+      
+      const filename = `summary-report-${fromDate ? format(fromDate, "yyyy-MM-dd") : "report"}-to-${toDate ? format(toDate, "yyyy-MM-dd") : "report"}.xlsx`;
+      
+      if (typeof window !== "undefined" && (window as any).ReactNativeWebView) {
+        const wbout = XLSX.write(workbook, { type: "base64", bookType: "xlsx" });
+        (window as any).ReactNativeWebView?.postMessage(
+          JSON.stringify({
+            type: "download",
+            fileType: "xlsx",
+            fileName: filename,
+            data: wbout,
+          })
+        );
+      } else {
+        XLSX.writeFile(workbook, filename);
+      }
+    } catch (error) {
+      console.error("Error exporting to Excel:", error);
+    }
+  };
+
+  // PDF Export Handler
+  const handleExportPDF = async () => {
+    if (rangeSummaries.length === 0) {
+      return;
+    }
+
+    try {
+      const { jsPDF, autoTable } = await loadPDF();
+      const doc = new jsPDF("landscape");
+
+      // Title
+      doc.setFontSize(16);
+      doc.text("Summary Report", 14, 15);
+      
+      if (fromDate && toDate) {
+        doc.setFontSize(12);
+        doc.text(
+          `Date Range: ${format(fromDate, "dd-MM-yyyy")} to ${format(toDate, "dd-MM-yyyy")}`,
+          14,
+          22
+        );
+      }
+
+      // Prepare table data
+      const tableData = rangeSummaries.map((summary) => [
+        formatDateForTable(summary.date),
+        summary.morning?.presentEmployees || 0,
+        summary.evening?.presentEmployees || 0,
+        summary.night?.presentEmployees || 0,
+        summary._uniqueEmployeeDays || 0,
+      ]);
+
+      // Add totals row
+      tableData.push([
+        "TOTAL",
+        totals.morning,
+        totals.evening,
+        totals.night,
+        totals.total,
+      ]);
+
+      (autoTable as any)(doc, {
+        head: [["Date", "Morning", "Evening", "Night", "Total"]],
+        body: tableData,
+        startY: fromDate && toDate ? 28 : 22,
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [59, 130, 246], textColor: 255 },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+      });
+
+      const filename = `summary-report-${fromDate ? format(fromDate, "yyyy-MM-dd") : "report"}-to-${toDate ? format(toDate, "yyyy-MM-dd") : "report"}.pdf`;
+      
+      if (typeof window !== "undefined" && (window as any).ReactNativeWebView) {
+        const pdfBlob = doc.output("blob");
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64data = (reader.result as string).split(",")[1];
+          (window as any).ReactNativeWebView?.postMessage(
+            JSON.stringify({
+              type: "download",
+              fileType: "pdf",
+              fileName: filename,
+              data: base64data,
+            })
+          );
+        };
+        reader.readAsDataURL(pdfBlob);
+      } else {
+        doc.save(filename);
+      }
+    } catch (error) {
+      console.error("Error exporting to PDF:", error);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <AdminPageHeader
@@ -448,24 +584,50 @@ export function SummaryReport() {
             </Popover>
           </div>
 
-          {/* Refresh Button */}
-          <Button
-            onClick={fetchRangeData}
-            disabled={loading || !fromDate || !toDate}
-            className="w-full sm:w-auto"
-          >
-            {loading ? (
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button
+              onClick={fetchRangeData}
+              disabled={loading || !fromDate || !toDate}
+              className="w-full sm:w-auto"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Refresh
+                </>
+              )}
+            </Button>
+            
+            {/* Download Buttons */}
+            {rangeSummaries.length > 0 && (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Loading...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Refresh
+                <Button
+                  onClick={handleExportExcel}
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  disabled={loading}
+                >
+                  <FileDown className="mr-2 h-4 w-4" />
+                  Excel
+                </Button>
+                <Button
+                  onClick={handleExportPDF}
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  disabled={loading}
+                >
+                  <FileDown className="mr-2 h-4 w-4" />
+                  PDF
+                </Button>
               </>
             )}
-          </Button>
+          </div>
 
           {/* Date Range Info */}
           {fromDate && toDate && (
