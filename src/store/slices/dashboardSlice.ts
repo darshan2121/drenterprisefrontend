@@ -18,7 +18,7 @@ const initialState: DashboardState = {
   totalEmployees: 0,
   totalManagers: 0,
   workingEmployees: 0,
-  shiftWise: { morning: 0, night: 0 },
+  shiftWise: { morning: 0, evening: 0, night: 0 },
   isLoading: false,
   error: null,
 };
@@ -35,6 +35,7 @@ export const fetchDashboard = createAsyncThunk<any>(
         workingEmployees: data.workingEmployees ?? 0,
         shiftWise: {
           morning: data.shiftWise?.morning ?? 0,
+          evening: data.shiftWise?.evening ?? 0,
           night: data.shiftWise?.night ?? 0,
           ...data.shiftWise,
         },

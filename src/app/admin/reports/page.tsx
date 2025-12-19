@@ -4,7 +4,7 @@ import { ReportsFilter } from "@/components/admin/ReportsFilter";
 import { ReportsTable } from "@/components/admin/ReportsTable";
 import { Card, CardContent } from "@/components/ui/card";
 import { useDispatch, useSelector } from "react-redux";
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { fetchAttendance } from "@/store/slices/attendanceSlice";
 import { RootState } from "@/store";
 import { format } from "date-fns";
@@ -42,10 +42,7 @@ export default function ReportsPage() {
     const pathname = usePathname();
     const isReadonly = authService.getCurrentUser()?.role === "readonly";
     
-    console.log('📊 ReportsPage component loaded');
-    console.log('📊 Current user role:', authService.getCurrentUser()?.role);
-    console.log('📊 Is readonly:', isReadonly);
-    console.log('📊 Current pathname:', pathname);
+    // Removed console.logs from render to prevent performance issues
 
     const dispatch = useDispatch();
     const attendanceList = useSelector((state: RootState) => state.attendance.attendanceList);
@@ -218,6 +215,9 @@ export default function ReportsPage() {
           });
         }
 
+        // Store original record for Present status checking (same as Muster Roll)
+        const originalRecord = att;
+
         const formatted = {
           _id: att._id,
           date: att.stepIn ? format(new Date(att.stepIn), 'yyyy-MM-dd') : '--',
@@ -238,6 +238,8 @@ export default function ReportsPage() {
           totalTime: att.totalTime || '',
           // Store original stepIn timestamp for deduplication (latest record)
           _stepInTimestamp: att.stepIn ? new Date(att.stepIn).getTime() : 0,
+          // Store original record for Present status checking (same as Muster Roll)
+          _originalRecord: originalRecord,
           // Include raw location data for editing
           _raw: {
             longitude: att.longitude,
@@ -256,13 +258,20 @@ export default function ReportsPage() {
       });
     }, [attendanceList]); // Removed dataVersion dependency to reduce re-renders
 
+    // Track previous filter key to only log when filters actually change
+    const prevFilterKeyRef = useRef<string>('');
+
     // Apply all filters on the frontend
     const filteredReports = useMemo(() => {
       // Only log when filters actually change, not on every render
       const filterKey = JSON.stringify(filters);
+      if (filterKey !== prevFilterKeyRef.current) {
+        // Only log when filters change
       console.log('Filtering reports with filters:', filters);
       console.log('Available employees:', employees.length);
       console.log('Available managers:', managers.length);
+        prevFilterKeyRef.current = filterKey;
+      }
       
       const filtered = formattedReports.filter(report => {
         try {
@@ -324,8 +333,11 @@ export default function ReportsPage() {
         return report.employeeId?._id && report.date && report.date !== '--';
       });
       
-      console.log('Valid reports (with employee ID and date):', validReports.length);
-      console.log('Invalid reports (excluded):', filtered.length - validReports.length);
+      // Only log when filters change (not on every recalculation)
+      if (filterKey !== prevFilterKeyRef.current) {
+        console.log('Valid reports (with employee ID and date):', validReports.length);
+        console.log('Invalid reports (excluded):', filtered.length - validReports.length);
+      }
       
       // Calculate shift-wise totals to match Summary Report API
       const shiftTotals = {
@@ -354,13 +366,48 @@ export default function ReportsPage() {
       
       const sumOfShiftTotals = shiftTotals.morning + shiftTotals.evening + shiftTotals.night;
       
-      console.log('📊 Shift-wise totals (matching Summary API):', shiftTotals);
-      console.log('📊 Sum of shift totals:', sumOfShiftTotals);
+      // Only log when filters change
+      if (filterKey !== prevFilterKeyRef.current) {
+        console.log('📊 Shift-wise totals (matching Summary API):', shiftTotals);
+        console.log('📊 Sum of shift totals:', sumOfShiftTotals);
+      }
       
-      // Deduplicate: Keep only the latest entry per employee per day
+      // CRITICAL: Filter by "Present" status (same logic as Muster Roll and Summary Report)
+      // This ensures we only count records that are actually "Present", not all records
+      // This is the KEY difference - Muster Roll and Summary Report only count "Present" records
+      const presentReports = validReports.filter(report => {
+        // Get the original attendance record to check status
+        const originalRecord = (report as any)._originalRecord || attendanceList.find(att => att._id === report._id);
+        if (!originalRecord) return false;
+        
+        // Use EXACT same logic as Muster Roll's getStatusFromRecord
+        // Prefer explicit status field
+        if (originalRecord.status) {
+          const normalized = String(originalRecord.status).toLowerCase();
+          if (normalized === "present") return true;
+          if (normalized === "absent") return false;
+          if (normalized === "weekoff" || normalized === "week_off" || normalized === "week-off") return false;
+        }
+        
+        // If status not explicitly set, check stepOut/stepIn
+        if (originalRecord.stepOut) {
+          // Has stepOut = Present (exact match with Muster Roll)
+          return true;
+        } else if (originalRecord.stepIn && !originalRecord.stepOut) {
+          // Check if same day (exact match with Muster Roll's date comparison)
+          const recordDate = new Date(originalRecord.stepIn);
+          const targetDate = new Date(report.date + 'T00:00:00');
+          const isSameDay = recordDate.toDateString() === targetDate.toDateString();
+          return isSameDay;
+        }
+        
+        return false; // No stepIn = Absent
+      });
+      
+      // Deduplicate: Keep only the latest entry per employee per day (only for Present records)
       const deduplicatedMap = new Map<string, typeof filtered[0]>();
       
-      validReports.forEach(report => {
+      presentReports.forEach(report => {
         const key = `${report.employeeId!._id}_${report.date}`;
         const existing = deduplicatedMap.get(key);
         
@@ -371,13 +418,24 @@ export default function ReportsPage() {
       });
       
       const deduplicated = Array.from(deduplicatedMap.values());
-      console.log('Deduplicated reports count (unique employee-days):', deduplicated.length);
-      console.log('Removed duplicates:', validReports.length - deduplicated.length);
-      console.log('Total excluded (invalid + duplicates):', filtered.length - deduplicated.length);
-      console.log('📊 Difference (Sum of shifts - Unique count):', sumOfShiftTotals - deduplicated.length);
       
-      // If there's a difference, log which employees have multiple shifts
-      if (sumOfShiftTotals !== deduplicated.length) {
+      // Only log when filters change (not on every recalculation)
+      if (filterKey !== prevFilterKeyRef.current) {
+        console.log('📊 ATTENDANCE REPORTS - Present status filter:', {
+          validReports: validReports.length,
+          presentReports: presentReports.length,
+          excluded: validReports.length - presentReports.length,
+          note: 'Only counting records marked as "Present" (same as Muster Roll & Summary Report)'
+        });
+        console.log('📊 ATTENDANCE REPORTS - Deduplicated count (unique employee-days, Present only):', deduplicated.length);
+        console.log('📊 ATTENDANCE REPORTS - Removed duplicates:', presentReports.length - deduplicated.length);
+        console.log('📊 ATTENDANCE REPORTS - Total excluded (invalid + non-present + duplicates):', filtered.length - deduplicated.length);
+        console.log('✅ ATTENDANCE REPORTS - This count should match Muster Roll & Summary Report:', deduplicated.length);
+        console.log('📊 Difference (Sum of shifts - Unique count):', sumOfShiftTotals - deduplicated.length);
+      }
+      
+      // If there's a difference, log which employees have multiple shifts (only when filters change)
+      if (sumOfShiftTotals !== deduplicated.length && filterKey !== prevFilterKeyRef.current) {
         const employeesWithMultipleShifts = new Map<string, string[]>();
         validReports.forEach(report => {
           if (report.employeeId?._id && report.shift) {
@@ -399,27 +457,29 @@ export default function ReportsPage() {
         console.log('📊 Sample multi-shift employees:', multiShiftEmployees.slice(0, 5));
       }
       
-      // Log count by date when date filter is applied
-      if (filters.date || (filters.startDate && filters.endDate && filters.startDate === filters.endDate)) {
-        const targetDate = filters.date ? format(filters.date, 'yyyy-MM-dd') : filters.startDate;
-        const countForDate = deduplicated.filter(r => r.date === targetDate).length;
-        console.log(`📊 ATTENDANCE REPORTS - Date Filter Applied:`);
-        console.log(`   📅 Selected Date: ${targetDate}`);
-        console.log(`   👥 Employee Count: ${countForDate}`);
-        console.log(`   📋 Total Records: ${deduplicated.length}`);
-        console.log(`   ⚠️ This count should match Muster Roll for the same date!`);
-      } else if (filters.startDate && filters.endDate) {
-        // Date range - count per day
-        const countsByDate: Record<string, number> = {};
-        deduplicated.forEach(report => {
-          if (report.date && report.date !== '--') {
-            countsByDate[report.date] = (countsByDate[report.date] || 0) + 1;
-          }
-        });
-        console.log(`📊 ATTENDANCE REPORTS - Date Range Filter Applied:`);
-        console.log(`   📅 Date Range: ${filters.startDate} to ${filters.endDate}`);
-        console.log(`   📊 Counts by Date:`, countsByDate);
-        console.log(`   👥 Total Unique Employees: ${deduplicated.length}`);
+      // Log count by date when date filter is applied (only when filters change)
+      if (filterKey !== prevFilterKeyRef.current) {
+        if (filters.date || (filters.startDate && filters.endDate && filters.startDate === filters.endDate)) {
+          const targetDate = filters.date ? format(filters.date, 'yyyy-MM-dd') : filters.startDate;
+          const countForDate = deduplicated.filter(r => r.date === targetDate).length;
+          console.log(`📊 ATTENDANCE REPORTS - Date Filter Applied:`);
+          console.log(`   📅 Selected Date: ${targetDate}`);
+          console.log(`   👥 Employee Count: ${countForDate}`);
+          console.log(`   📋 Total Records: ${deduplicated.length}`);
+          console.log(`   ⚠️ This count should match Muster Roll for the same date!`);
+        } else if (filters.startDate && filters.endDate) {
+          // Date range - count per day
+          const countsByDate: Record<string, number> = {};
+          deduplicated.forEach(report => {
+            if (report.date && report.date !== '--') {
+              countsByDate[report.date] = (countsByDate[report.date] || 0) + 1;
+            }
+          });
+          console.log(`📊 ATTENDANCE REPORTS - Date Range Filter Applied:`);
+          console.log(`   📅 Date Range: ${filters.startDate} to ${filters.endDate}`);
+          console.log(`   📊 Counts by Date:`, countsByDate);
+          console.log(`   👥 Total Unique Employees: ${deduplicated.length}`);
+        }
       }
       
       return deduplicated;

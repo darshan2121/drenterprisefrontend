@@ -331,7 +331,7 @@ export function ReportsTable({
     if (report.employeeId && report.employeeId.image) {
       const employeeProfileUrl = getImageUrl(report.employeeId.image);
       if (employeeProfileUrl) {
-        console.log('✅ Using employee profile image for:', report.employee, 'Image:', report.employeeId.image);
+        // Removed console.log to prevent performance issues
         return employeeProfileUrl;
       }
     }
@@ -339,7 +339,7 @@ export function ReportsTable({
     // SECOND PRIORITY: Employee profile image from fetched employees data
     const employeeImageUrl = getEmployeeImage(report);
     if (employeeImageUrl) {
-      console.log('✅ Using fetched employee image for:', report.employee);
+      // Removed console.log to prevent performance issues
       return employeeImageUrl;
     }
     
@@ -347,7 +347,7 @@ export function ReportsTable({
     if (report.employeePhoto) {
       const employeePhotoUrl = getImageUrl(report.employeePhoto);
       if (employeePhotoUrl) {
-        console.log('✅ Using employee photo for:', report.employee);
+        // Removed console.log to prevent performance issues
         return employeePhotoUrl;
       }
     }
@@ -356,7 +356,7 @@ export function ReportsTable({
     if (report.stepIn) {
       const stepInUrl = getImageUrl(report.stepIn);
       if (stepInUrl) {
-        console.log('⚠️ Using step-in image for:', report.employee, 'No profile image available');
+        // Removed console.log to prevent performance issues
         return stepInUrl;
       }
     }
@@ -868,11 +868,11 @@ export function ReportsTable({
               src={getBestImageUrl(report)} 
               alt={report.employee}
               onError={(e) => {
-                console.log('❌ Report table image failed to load for:', report.employee);
+                // Removed console.log to prevent performance issues
                 e.currentTarget.src = `https://placehold.co/400x400/6366f1/ffffff?text=${report.employee.charAt(0).toUpperCase()}`;
               }}
               onLoad={() => {
-                console.log('✅ Report table image loaded for:', report.employee);
+                // Removed console.log to prevent performance issues
               }}
             />
             <AvatarFallback className="text-xs bg-gray-100">

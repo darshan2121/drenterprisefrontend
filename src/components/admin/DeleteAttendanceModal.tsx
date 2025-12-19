@@ -33,12 +33,7 @@ export function DeleteAttendanceModal({
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  console.log('🗑️ DeleteAttendanceModal rendered with:', {
-    attendanceId,
-    employeeName,
-    date,
-    open
-  });
+  // Removed console.log from render to prevent performance issues
 
   const handleDelete = async () => {
     try {
@@ -77,14 +72,8 @@ export function DeleteAttendanceModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={(newOpen) => {
-      console.log('🗑️ Delete modal open state changing:', newOpen);
-      setOpen(newOpen);
-    }}>
-      <div data-modal="delete-attendance" onClick={() => {
-        console.log('🗑️ Modal trigger clicked');
-        setOpen(true);
-      }}>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <div data-modal="delete-attendance" onClick={() => setOpen(true)}>
         {children}
       </div>
       <DialogContent className="sm:max-w-[425px]">

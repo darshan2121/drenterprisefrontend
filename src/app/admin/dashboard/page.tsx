@@ -9,12 +9,8 @@ import { cn } from "@/lib/utils";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import dynamic from "next/dynamic";
 
-// Lazy load recharts - heavy library
-const BarChart = dynamic(() => import("recharts").then(mod => mod.BarChart), { ssr: false });
-const Bar = dynamic(() => import("recharts").then(mod => mod.Bar), { ssr: false });
-const CartesianGrid = dynamic(() => import("recharts").then(mod => mod.CartesianGrid), { ssr: false });
-const XAxis = dynamic(() => import("recharts").then(mod => mod.XAxis), { ssr: false });
-const YAxis = dynamic(() => import("recharts").then(mod => mod.YAxis), { ssr: false });
+// Import recharts directly - dynamic imports might be causing issues
+import { BarChart, Bar, CartesianGrid, XAxis, YAxis } from "recharts";
 import { useEffect, useState, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchDashboard } from "@/store/slices/dashboardSlice";
@@ -94,6 +90,7 @@ export default function AdminDashboardPage() {
   const [checking, setChecking] = useState(true);
   const [isAuthed, setIsAuthed] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [isClient, setIsClient] = useState(false);
   const dispatch = useDispatch<AppDispatch>();
   const { totalEmployees, totalManagers, workingEmployees, shiftWise, isLoading } = useSelector((state: RootState) => state.dashboard);
   
@@ -128,6 +125,11 @@ export default function AdminDashboardPage() {
     }
   }, [isAuthed, dispatch]);
 
+  // Ensure we're on client side for chart rendering
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
   // Update time every minute
   useEffect(() => {
     const timer = setInterval(() => {
@@ -137,12 +139,25 @@ export default function AdminDashboardPage() {
     return () => clearInterval(timer);
   }, []);
 
+
   // Redirect readonly users to reports
   useEffect(() => {
     if (isReadonly()) {
       handleNavigateToReports();
     }
   }, [isReadonly, handleNavigateToReports]);
+
+  // Debug: Log chart data to help diagnose display issues
+  // NOTE: This must be before any early returns to follow Rules of Hooks
+  useEffect(() => {
+    if (!isLoading && !checking && isAuthed) {
+      console.log('📊 Dashboard Chart Data:', {
+        shiftWise,
+        hasData: (shiftWise.morning ?? 0) > 0 || (shiftWise.evening ?? 0) > 0 || (shiftWise.night ?? 0) > 0,
+        totalCount: (shiftWise.morning ?? 0) + (shiftWise.evening ?? 0) + (shiftWise.night ?? 0)
+      });
+    }
+  }, [shiftWise, isLoading, checking, isAuthed]);
 
   if (checking || !isAuthed) {
     return (
@@ -188,6 +203,16 @@ export default function AdminDashboardPage() {
     { status: "Evening", count: shiftWise.evening ?? 0, fill: "hsl(var(--chart-3))", icon: Activity },
     { status: "Night", count: shiftWise.night ?? 0, fill: "hsl(var(--chart-4))", icon: CalendarOff },
   ];
+
+  // Debug: Log chart rendering decision
+  const shouldRenderChart = chartData.length > 0 && chartData.some(item => item.count > 0);
+  console.log('📊 Chart Render Decision:', {
+    shouldRender: shouldRenderChart,
+    isLoading,
+    chartData,
+    chartDataLength: chartData.length,
+    hasData: chartData.some(item => item.count > 0)
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -285,10 +310,14 @@ export default function AdminDashboardPage() {
                 <div className="flex justify-center items-center py-12 text-gray-500">
                   Loading chart...
                 </div>
-              ) : (
-                <div className="w-full">
+              ) : shouldRenderChart && isClient ? (
+                <div className="w-full min-h-[200px]">
                   <ChartContainer config={chartConfig} className="w-full h-[200px] sm:h-[250px] md:h-[300px]">
-                    <BarChart data={chartData} accessibilityLayer margin={{ left: 20, right: 20, top: 20, bottom: 5 }}>
+                    <BarChart 
+                      data={chartData} 
+                      accessibilityLayer 
+                      margin={{ left: 20, right: 20, top: 20, bottom: 5 }}
+                    >
                       <CartesianGrid vertical={false} strokeDasharray="3 3" opacity={0.3} />
                       <XAxis
                         dataKey="status"
@@ -314,9 +343,19 @@ export default function AdminDashboardPage() {
                           />
                         }
                       />
-                      <Bar dataKey="count" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="count" radius={[4, 4, 0, 0]} fill="hsl(var(--chart-2))" />
                     </BarChart>
                   </ChartContainer>
+                </div>
+              ) : shouldRenderChart && !isClient ? (
+                <div className="flex justify-center items-center py-12 text-gray-500">
+                  Loading chart...
+                </div>
+              ) : (
+                <div className="flex flex-col justify-center items-center py-12 text-gray-500">
+                  <BarChart3 className="h-12 w-12 mb-4 text-gray-400" />
+                  <p className="text-sm">No attendance data available</p>
+                  <p className="text-xs text-gray-400 mt-1">Chart will display when attendance data is available</p>
                 </div>
               )}
             </CardContent>

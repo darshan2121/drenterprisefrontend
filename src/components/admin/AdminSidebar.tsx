@@ -47,7 +47,7 @@ const menuItems = [
   { href: "/admin/managers", label: "Supervisor", icon: UserCog },
   { href: "/admin/admins", label: "Admins", icon: Shield },
   // { href: "/admin/attendance", label: "Attendance", icon: Clock }, // Commented out - replaced with Reports
-  { href: "/admin/reports/muster", label: "Muster Roll", icon: Table },
+  { href: "/admin/muster", label: "Muster Roll", icon: Table },
   { href: "/admin/reports", label: "Reports", icon: FileText }, // Attendance Reports
   { href: "/admin/reports/summary", label: "Summary Report", icon: BarChart3 },
 ];

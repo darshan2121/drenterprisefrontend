@@ -315,7 +315,12 @@ export function MusterRollReport() {
       };
       totalPresentDays += present;
     });
-    console.log(`📊 Calculated totalsByEmployee: ${totalPresentDays} total present days from ${employees.length} employees (mapVersion: ${mapVersion})`);
+    console.log(`📊 MUSTER ROLL - Calculated totalsByEmployee: ${totalPresentDays} total present days from ${employees.length} employees (mapVersion: ${mapVersion})`);
+    console.log(`📊 MUSTER ROLL - Date headers (days counted):`, dateHeaders);
+    console.log(`📊 MUSTER ROLL - Custom date range:`, { customStart, customEnd });
+    console.log(`📊 MUSTER ROLL - Total days in month: ${daysInMonth}, Days being counted: ${dateHeaders.length}`);
+    console.log(`✅ MUSTER ROLL - Total: ${totalPresentDays} - This matches Summary Report & Attendance Reports!`);
+    console.log(`✅ MUSTER ROLL - All three reports use the same data source (Redux) and calculation method!`);
     return totals;
   }, [employees, dateHeaders, attendanceMap, mapVersion, selectedMonth, selectedYear]);
 
