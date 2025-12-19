@@ -52,25 +52,40 @@ export function BulkUpdateModal({ selectedIds, onSuccess, trigger, disabled, cur
   const [stepIn, setStepIn] = useState("");
   const [stepOut, setStepOut] = useState("");
   const [shift, setShift] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [location, setLocation] = useState("");
   const { toast } = useToast();
 
   // Reset form when modal opens
   useEffect(() => {
     if (open) {
       // Clear all fields - let user choose what to update
-      console.log('Modal opening - clearing all fields');
-      console.log('Current state before clearing:', { shift, stepIn, stepOut });
+      console.log('📝 Modal opening - resetting form');
+      console.log('📋 Selected records:', selectedRecords?.length || 0);
+      
+      // Default to today's date for easier "old attendance to today" updates
+      const today = new Date().toISOString().split('T')[0];
+      
       setShift("");
       setStepIn("");
       setStepOut("");
+      setStartDate(today); // Default to today
+      setEndDate("");
+      setLocation("");
+      
+      console.log('✅ Form reset - Start Date defaulted to today:', today);
     } else {
       // Also clear when modal closes to ensure clean state
-      console.log('Modal closing - clearing all fields');
+      console.log('📝 Modal closing - clearing all fields');
       setShift("");
       setStepIn("");
       setStepOut("");
+      setStartDate("");
+      setEndDate("");
+      setLocation("");
     }
-  }, [open]);
+  }, [open, selectedRecords]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,15 +94,27 @@ export function BulkUpdateModal({ selectedIds, onSuccess, trigger, disabled, cur
     console.log('Form submission - Current state:', { shift, stepIn, stepOut });
     
     // Validate that at least one field is provided
-    // Note: stepOut can be empty string to clear the value, so we don't count it as "no field provided"
     const hasShift = shift && shift.trim() !== '';
     const hasStepIn = stepIn && stepIn.trim() !== '';
     const hasStepOut = stepOut && stepOut.trim() !== '';
+    const hasStartDate = startDate && startDate.trim() !== '';
+    const hasEndDate = endDate && endDate.trim() !== '';
+    const hasLocation = location && location.trim() !== '';
     
-    if (!hasShift && !hasStepIn && !hasStepOut) {
+    if (!hasShift && !hasStepIn && !hasStepOut && !hasStartDate && !hasEndDate && !hasLocation) {
       toast({
         title: "Error",
-        description: "Please provide at least one field to update (shift, clock in, or clock out).",
+        description: "Please provide at least one field to update (shift, dates, times, or location).",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Validate that if clockIn is provided, startDate is also provided
+    if (hasStepIn && !hasStartDate) {
+      toast({
+        title: "Validation Error",
+        description: "Start Date is required when Clock In time is provided.",
         variant: "destructive",
       });
       return;
@@ -107,9 +134,11 @@ export function BulkUpdateModal({ selectedIds, onSuccess, trigger, disabled, cur
     try {
       setLoading(true);
       
-      // Get the date from the selected records - use the first record's date
+      // Use startDate if provided, otherwise fall back to first record's date
       let targetDate = new Date().toISOString().split('T')[0]; // Default to today
-      if (selectedRecords && selectedRecords.length > 0) {
+      if (startDate && startDate.trim() !== '') {
+        targetDate = startDate;
+      } else if (selectedRecords && selectedRecords.length > 0) {
         const firstRecord = selectedRecords[0];
         if (firstRecord.date && firstRecord.date !== '--') {
           targetDate = firstRecord.date;
@@ -122,23 +151,50 @@ export function BulkUpdateModal({ selectedIds, onSuccess, trigger, disabled, cur
       };
 
       // Add shift if provided
-      if (shift) {
+      if (shift && shift.trim() !== '') {
         updateData.shift = shift;
       }
 
       // Handle stepIn: send ISO string if valid, or null if empty
       if (stepIn && stepIn.trim() !== '') {
-        const stepInDateTime = new Date(`${targetDate}T${stepIn}:00`);
-        updateData.stepIn = stepInDateTime.toISOString();
-        console.log(`Bulk Clock In: ${stepIn} -> ${updateData.stepIn} (UTC)`);
-      } else if (stepIn !== undefined) { // If stepIn was explicitly cleared (empty string)
+        if (!startDate || startDate.trim() === '') {
+          toast({
+            title: "Validation Error",
+            description: "Start Date is required when Clock In time is provided.",
+            variant: "destructive",
+          });
+          setLoading(false);
+          return;
+        }
+        const stepInDateTime = new Date(`${startDate}T${stepIn}:00`);
+        if (!isNaN(stepInDateTime.getTime())) {
+          updateData.stepIn = stepInDateTime.toISOString();
+          console.log(`Bulk Clock In: ${startDate} ${stepIn} -> ${updateData.stepIn} (UTC)`);
+        }
+      } else if (stepIn !== undefined && stepIn.trim() === '') { // If stepIn was explicitly cleared (empty string)
         updateData.stepIn = null;
         console.log(`Bulk Clock In: Cleared -> ${updateData.stepIn}`);
       }
 
       // Handle stepOut: send ISO string if valid, or null if empty
       if (stepOut && stepOut.trim() !== '') {
-        const stepOutDateTime = new Date(`${targetDate}T${stepOut}:00`);
+        // Use endDate if provided, otherwise use startDate (same day)
+        const stepOutDate = (endDate && endDate.trim() !== '') ? endDate : startDate;
+        if (!stepOutDate || stepOutDate.trim() === '') {
+          // If no date is available, use startDate or targetDate
+          const fallbackDate = startDate || targetDate;
+          if (!fallbackDate) {
+            toast({
+              title: "Validation Error",
+              description: "Date is required when Clock Out time is provided.",
+              variant: "destructive",
+            });
+            setLoading(false);
+            return;
+          }
+        }
+        
+        const stepOutDateTime = new Date(`${stepOutDate || startDate || targetDate}T${stepOut}:00`);
         
         // Handle night shift that spans across midnight
         if (shift === 'night' && stepIn && stepOut < stepIn) {
@@ -146,15 +202,31 @@ export function BulkUpdateModal({ selectedIds, onSuccess, trigger, disabled, cur
           stepOutDateTime.setDate(stepOutDateTime.getDate() + 1);
         }
         
-        updateData.stepOut = stepOutDateTime.toISOString();
-        console.log(`Bulk Clock Out: ${stepOut} -> ${updateData.stepOut} (UTC)`);
-      } else if (stepOut !== undefined) { // If stepOut was explicitly cleared (empty string)
+        if (!isNaN(stepOutDateTime.getTime())) {
+          updateData.stepOut = stepOutDateTime.toISOString();
+          console.log(`Bulk Clock Out: ${stepOutDate || startDate || targetDate} ${stepOut} -> ${updateData.stepOut} (UTC)`);
+        }
+      } else if (stepOut !== undefined && stepOut.trim() === '') { // If stepOut was explicitly cleared (empty string)
         updateData.stepOut = null;
         console.log(`Bulk Clock Out: Cleared -> ${updateData.stepOut}`);
       }
 
-      console.log('Bulk update data being sent:', updateData);
-      console.log('Raw form values:', { shift, stepIn, stepOut });
+      // Add location if provided
+      if (location && location.trim() !== '') {
+        updateData.address = location.trim();
+      }
+
+      console.log('📤 Bulk update data being sent:', updateData);
+      console.log('📋 Raw form values:', { shift, stepIn, stepOut, startDate, endDate, location });
+      console.log('📅 Date conversion details:', {
+        startDate,
+        endDate,
+        stepInTime: stepIn,
+        stepOutTime: stepOut,
+        stepInISO: updateData.stepIn,
+        stepOutISO: updateData.stepOut,
+        selectedRecordsCount: selectedIds.length
+      });
 
       // Use direct API call for bulk update
       const result = await http<{ modifiedCount: number }>(ENDPOINTS.attendance.bulkUpdate, {
@@ -188,11 +260,11 @@ export function BulkUpdateModal({ selectedIds, onSuccess, trigger, disabled, cur
   const getShiftTimes = (selectedShift: string) => {
     switch (selectedShift) {
       case "morning":
-        return { stepIn: "08:00", stepOut: "17:00" };
+        return { stepIn: "07:00", stepOut: "15:00" }; // 7 AM - 3 PM
       case "evening":
-        return { stepIn: "14:00", stepOut: "22:00" };
+        return { stepIn: "14:00", stepOut: "22:00" }; // 2 PM - 10 PM
       case "night":
-        return { stepIn: "22:00", stepOut: "07:00" };
+        return { stepIn: "22:00", stepOut: "07:00" }; // 10 PM - 7 AM
       default:
         return { stepIn: "", stepOut: "" };
     }
@@ -208,30 +280,45 @@ export function BulkUpdateModal({ selectedIds, onSuccess, trigger, disabled, cur
       <DialogTrigger asChild>
         <div>{trigger}</div>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Bulk Update Attendance</DialogTitle>
           <DialogDescription>
-            Update shift, clock-in, and/or clock-out times for {selectedIds.length} selected record(s). You can update any combination of these fields.
+            Update shift, dates, clock-in, clock-out, and/or location for {selectedIds.length} selected record(s). You can update any combination of these fields.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
-            <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-md">
-              💡 <strong>Tip:</strong> You can update any combination of fields. Leave fields empty if you don't want to change them. Use the "Use [shift] time" buttons to quickly set suggested times.
+            <div className="text-sm text-gray-600 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-md space-y-1">
+              <div>💡 <strong>Tip:</strong> You can update any combination of fields. Leave fields empty if you don't want to change them.</div>
+              <div>📅 <strong>To change old attendance to today:</strong> Set "Start Date" to today's date, then set Clock In/Out times.</div>
+              <div>⏰ Use the "Use [shift] time" buttons to quickly set suggested times.</div>
             </div>
+            
             <div className="grid gap-2">
               <Label htmlFor="shift">Shift</Label>
-              <Select value={shift} onValueChange={handleShiftChange}>
+              <Select value={shift} onValueChange={handleShiftChange} disabled={loading}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select shift" />
+                  <SelectValue placeholder="Select shift (optional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="morning">Morning (8 AM - 5 PM)</SelectItem>
-                  <SelectItem value="evening">Evening (2 PM - 10 PM)</SelectItem>
-                  <SelectItem value="night">Night (10 PM - 7 AM)</SelectItem>
+                  <SelectItem value="morning">7 AM - 3 PM (Morning)</SelectItem>
+                  <SelectItem value="evening">2 PM - 10 PM (Evening)</SelectItem>
+                  <SelectItem value="night">10 PM - 7 AM (Night)</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            
+            <div className="grid gap-2">
+              <Label htmlFor="startDate">Start Date</Label>
+              <Input 
+                id="startDate" 
+                type="date"
+                value={startDate} 
+                onChange={(e) => setStartDate(e.target.value)} 
+                disabled={loading}
+                placeholder="Select start date"
+              />
             </div>
             
             <div className="grid gap-2">
@@ -247,6 +334,7 @@ export function BulkUpdateModal({ selectedIds, onSuccess, trigger, disabled, cur
                       setStepIn(times.stepIn);
                     }}
                     className="text-xs"
+                    disabled={loading}
                   >
                     Use {shift} time
                   </Button>
@@ -261,9 +349,22 @@ export function BulkUpdateModal({ selectedIds, onSuccess, trigger, disabled, cur
                   onChange={(e) => setStepIn(e.target.value)}
                   className="pl-10"
                   placeholder="HH:MM"
+                  disabled={loading}
                   key={`stepIn-${open}`}
                 />
               </div>
+            </div>
+            
+            <div className="grid gap-2">
+              <Label htmlFor="endDate">End Date (Optional)</Label>
+              <Input 
+                id="endDate" 
+                type="date"
+                value={endDate} 
+                onChange={(e) => setEndDate(e.target.value)} 
+                disabled={loading}
+                placeholder="Select end date (defaults to start date)"
+              />
             </div>
             
             <div className="grid gap-2">
@@ -276,10 +377,10 @@ export function BulkUpdateModal({ selectedIds, onSuccess, trigger, disabled, cur
                     size="sm"
                     onClick={() => {
                       const times = getShiftTimes(shift);
-                      console.log('Use night time button clicked for stepOut:', times.stepOut);
                       setStepOut(times.stepOut);
                     }}
                     className="text-xs"
+                    disabled={loading}
                   >
                     Use {shift} time
                   </Button>
@@ -291,15 +392,24 @@ export function BulkUpdateModal({ selectedIds, onSuccess, trigger, disabled, cur
                   id="stepOut"
                   type="time"
                   value={stepOut || ""}
-                  onChange={(e) => {
-                    console.log('Clock out input changed:', e.target.value);
-                    setStepOut(e.target.value);
-                  }}
+                  onChange={(e) => setStepOut(e.target.value)}
                   className="pl-10"
                   placeholder="HH:MM"
+                  disabled={loading}
                   key={`stepOut-${open}`}
                 />
               </div>
+            </div>
+            
+            <div className="grid gap-2">
+              <Label htmlFor="location">Location (Optional)</Label>
+              <Input 
+                id="location" 
+                value={location} 
+                onChange={(e) => setLocation(e.target.value)} 
+                disabled={loading}
+                placeholder="Enter location address"
+              />
             </div>
           </div>
           <DialogFooter>

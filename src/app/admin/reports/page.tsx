@@ -2,7 +2,7 @@
 
 import { ReportsFilter } from "@/components/admin/ReportsFilter";
 import { ReportsTable } from "@/components/admin/ReportsTable";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { useDispatch, useSelector } from "react-redux";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { fetchAttendance } from "@/store/slices/attendanceSlice";
@@ -20,9 +20,11 @@ import { authService } from "@/services/authService";
 import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
 import { HeaderActions } from "@/components/admin/ReportsTable";
-import { Edit3, Download, FileDown, RefreshCw, Loader2, Trash2 } from "lucide-react";
+import { Edit3, Download, FileDown, RefreshCw, Loader2, Trash2, Search, X } from "lucide-react";
 import { PDFDownloadButton } from "@/components/ui/pdf-download-button";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useDebounce } from "@/hooks/useDebounce";
 import dynamic from "next/dynamic";
 
 // Lazy load heavy libraries only when needed
@@ -82,6 +84,16 @@ export default function ReportsPage() {
       endDate: undefined as string | undefined,
       order: "desc",
     });
+    
+    // Search state
+    const [searchInput, setSearchInput] = useState("");
+    const debouncedSearchQuery = useDebounce(searchInput, 300);
+    const [searchQuery, setSearchQuery] = useState("");
+    
+    // Update search query when debounced value changes
+    useEffect(() => {
+      setSearchQuery(debouncedSearchQuery);
+    }, [debouncedSearchQuery]);
     
     // State for checkbox selection
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -289,7 +301,16 @@ export default function ReportsPage() {
             }
           }
           
-          return matchManager && matchEmployee && matchShift && matchDate;
+          // Search filter - search across multiple fields
+          const matchSearch = !searchQuery || 
+            report.employee?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            report.date?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            report.shift?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            report.location?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            report.clockIn?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            report.clockOut?.toLowerCase().includes(searchQuery.toLowerCase());
+          
+          return matchManager && matchEmployee && matchShift && matchDate && matchSearch;
         } catch (error) {
           console.error('Error filtering report:', error, report);
           return false;
@@ -298,25 +319,85 @@ export default function ReportsPage() {
       
       console.log('Filtered reports count (before deduplication):', filtered.length);
       
+      // First, filter out invalid records (no employee ID or invalid date)
+      const validReports = filtered.filter(report => {
+        return report.employeeId?._id && report.date && report.date !== '--';
+      });
+      
+      console.log('Valid reports (with employee ID and date):', validReports.length);
+      console.log('Invalid reports (excluded):', filtered.length - validReports.length);
+      
+      // Calculate shift-wise totals to match Summary Report API
+      const shiftTotals = {
+        morning: 0,
+        evening: 0,
+        night: 0
+      };
+      
+      // Count distinct employees per shift (matching Summary API logic)
+      const shiftEmployeeSets = {
+        morning: new Set<string>(),
+        evening: new Set<string>(),
+        night: new Set<string>()
+      };
+      
+      validReports.forEach(report => {
+        if (report.employeeId?._id && report.shift && ['morning', 'evening', 'night'].includes(report.shift)) {
+          const empId = report.employeeId._id;
+          shiftEmployeeSets[report.shift as keyof typeof shiftEmployeeSets].add(empId);
+        }
+      });
+      
+      shiftTotals.morning = shiftEmployeeSets.morning.size;
+      shiftTotals.evening = shiftEmployeeSets.evening.size;
+      shiftTotals.night = shiftEmployeeSets.night.size;
+      
+      const sumOfShiftTotals = shiftTotals.morning + shiftTotals.evening + shiftTotals.night;
+      
+      console.log('📊 Shift-wise totals (matching Summary API):', shiftTotals);
+      console.log('📊 Sum of shift totals:', sumOfShiftTotals);
+      
       // Deduplicate: Keep only the latest entry per employee per day
       const deduplicatedMap = new Map<string, typeof filtered[0]>();
       
-      filtered.forEach(report => {
-        // Only process records with valid employee ID and date
-        if (report.employeeId?._id && report.date && report.date !== '--') {
-          const key = `${report.employeeId._id}_${report.date}`;
-          const existing = deduplicatedMap.get(key);
-          
-          // If no existing record or this one is newer (later stepIn time), keep this one
-          if (!existing || (report._stepInTimestamp > existing._stepInTimestamp)) {
-            deduplicatedMap.set(key, report);
-          }
+      validReports.forEach(report => {
+        const key = `${report.employeeId!._id}_${report.date}`;
+        const existing = deduplicatedMap.get(key);
+        
+        // If no existing record or this one is newer (later stepIn time), keep this one
+        if (!existing || (report._stepInTimestamp > existing._stepInTimestamp)) {
+          deduplicatedMap.set(key, report);
         }
       });
       
       const deduplicated = Array.from(deduplicatedMap.values());
-      console.log('Deduplicated reports count:', deduplicated.length);
-      console.log('Removed duplicates:', filtered.length - deduplicated.length);
+      console.log('Deduplicated reports count (unique employee-days):', deduplicated.length);
+      console.log('Removed duplicates:', validReports.length - deduplicated.length);
+      console.log('Total excluded (invalid + duplicates):', filtered.length - deduplicated.length);
+      console.log('📊 Difference (Sum of shifts - Unique count):', sumOfShiftTotals - deduplicated.length);
+      
+      // If there's a difference, log which employees have multiple shifts
+      if (sumOfShiftTotals !== deduplicated.length) {
+        const employeesWithMultipleShifts = new Map<string, string[]>();
+        validReports.forEach(report => {
+          if (report.employeeId?._id && report.shift) {
+            const empId = report.employeeId._id;
+            if (!employeesWithMultipleShifts.has(empId)) {
+              employeesWithMultipleShifts.set(empId, []);
+            }
+            const shifts = employeesWithMultipleShifts.get(empId)!;
+            if (!shifts.includes(report.shift)) {
+              shifts.push(report.shift);
+            }
+          }
+        });
+        
+        const multiShiftEmployees = Array.from(employeesWithMultipleShifts.entries())
+          .filter(([_, shifts]) => shifts.length > 1);
+        
+        console.log('📊 Employees with multiple shifts on same day:', multiShiftEmployees.length);
+        console.log('📊 Sample multi-shift employees:', multiShiftEmployees.slice(0, 5));
+      }
       
       // Log count by date when date filter is applied
       if (filters.date || (filters.startDate && filters.endDate && filters.startDate === filters.endDate)) {
@@ -342,12 +423,133 @@ export default function ReportsPage() {
       }
       
       return deduplicated;
-    }, [formattedReports, filters, employees, managers, attendanceList]); // Removed dataVersion dependency
+    }, [formattedReports, filters, employees, managers, attendanceList, searchQuery]); // Added searchQuery dependency
 
     // Calculate unique employee-days count (should match filteredReports.length after deduplication)
     const uniqueEmployeeDaysCount = useMemo(() => {
-      return filteredReports.length; // After deduplication, this is already unique
+      // Ensure we only count valid records with employee ID and date
+      const validCount = filteredReports.filter(r => 
+        r.employeeId?._id && r.date && r.date !== '--'
+      ).length;
+      
+      // Log if there's a discrepancy
+      if (validCount !== filteredReports.length) {
+        console.warn('⚠️ Count discrepancy:', {
+          total: filteredReports.length,
+          valid: validCount,
+          invalid: filteredReports.length - validCount
+        });
+      }
+      
+      return validCount; // Return only valid records count
     }, [filteredReports]);
+    
+    // Calculate shift totals and unique count for the ENTIRE date range (sum across all days)
+    // This matches Summary Report logic - sum of shift totals across all days in range
+    const [rangeShiftTotals, setRangeShiftTotals] = useState({
+      morning: 0,
+      evening: 0,
+      night: 0,
+      uniqueCount: 0,
+      loading: false
+    });
+
+    // Fetch shift totals and unique count for the entire date range when dates are selected
+    useEffect(() => {
+      const fetchRangeData = async () => {
+        if (!filters.startDate || !filters.endDate) {
+          setRangeShiftTotals({ morning: 0, evening: 0, night: 0, uniqueCount: 0, loading: false });
+          return;
+        }
+
+        setRangeShiftTotals(prev => ({ ...prev, loading: true }));
+
+        try {
+          // Generate array of dates between startDate and endDate
+          const start = new Date(filters.startDate);
+          const end = new Date(filters.endDate);
+          const dateRange: string[] = [];
+          
+          for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            dateRange.push(format(d, 'yyyy-MM-dd'));
+          }
+
+          // Fetch shift summaries for all dates in parallel
+          const shifts = ['morning', 'evening', 'night'];
+          const promises = dateRange.flatMap(date =>
+            shifts.map(shift =>
+              http<{ presentEmployees: number }>(
+                `${ENDPOINTS.attendance.summary}?date=${date}&shift=${shift}`
+              ).catch(() => ({ presentEmployees: 0 }))
+            )
+          );
+
+          // Also fetch all attendance data for unique count calculation
+          const attendancePromise = http<{ attendance: any[] }>(
+            `${ENDPOINTS.attendance.all}?startDate=${filters.startDate}&endDate=${filters.endDate}&order=asc`
+          ).catch(() => ({ attendance: [] }));
+
+          const [attendanceResponse, ...shiftResults] = await Promise.all([
+            attendancePromise,
+            ...promises
+          ]);
+          
+          // Sum up shift totals across all days
+          let morningTotal = 0;
+          let eveningTotal = 0;
+          let nightTotal = 0;
+
+          shiftResults.forEach((result, index) => {
+            const shiftIndex = index % 3;
+            const count = result.presentEmployees || 0;
+            
+            if (shiftIndex === 0) morningTotal += count;
+            else if (shiftIndex === 1) eveningTotal += count;
+            else nightTotal += count;
+          });
+
+          // Calculate unique employee-days count from attendance data
+          const attendanceArray = Array.isArray(attendanceResponse) ? attendanceResponse : 
+            (attendanceResponse as any)?.attendance || (attendanceResponse as any)?.data || [];
+          
+          // Build attendance map and count unique employee-days (same logic as filteredReports)
+          const uniqueMap = new Map<string, any>();
+          attendanceArray.forEach((record: any) => {
+            if (!record?._id && !record?.id) return;
+            const empId = record?.employeeId?._id || record?.employeeId || record?.employee?._id;
+            const keyDate = record?.stepIn ? new Date(record.stepIn).toISOString().split("T")[0] : null;
+            if (!empId || !keyDate) return;
+            
+            const key = `${empId}_${keyDate}`;
+            const existing = uniqueMap.get(key);
+            const recordTimestamp = record?.stepIn ? new Date(record.stepIn).getTime() : 0;
+            const existingTimestamp = existing?.stepIn ? new Date(existing.stepIn).getTime() : 0;
+            if (!existing || recordTimestamp > existingTimestamp) {
+              uniqueMap.set(key, record);
+            }
+          });
+
+          const uniqueCount = uniqueMap.size;
+
+          setRangeShiftTotals({
+            morning: morningTotal,
+            evening: eveningTotal,
+            night: nightTotal,
+            uniqueCount: uniqueCount,
+            loading: false
+          });
+        } catch (error) {
+          console.error('Error fetching range data:', error);
+          setRangeShiftTotals({ morning: 0, evening: 0, night: 0, uniqueCount: 0, loading: false });
+        }
+      };
+
+      fetchRangeData();
+    }, [filters.startDate, filters.endDate]);
+
+    // Use unique count from range data (for entire date range) as the main display number
+    // Fall back to uniqueEmployeeDaysCount if range data not loaded yet
+    const displayCount = rangeShiftTotals.uniqueCount > 0 ? rangeShiftTotals.uniqueCount : uniqueEmployeeDaysCount;
     
     // Pagination calculations
     const totalPages = Math.ceil(filteredReports.length / itemsPerPage);
@@ -355,10 +557,10 @@ export default function ReportsPage() {
     const endIndex = startIndex + itemsPerPage;
     const currentReports = filteredReports.slice(startIndex, endIndex);
 
-    // Reset to first page when filters change
+    // Reset to first page when filters or search change
     useEffect(() => {
       setCurrentPage(1);
-    }, [filters.managerId, filters.employeeId, filters.shift, filters.date]);
+    }, [filters.managerId, filters.employeeId, filters.shift, filters.date, searchQuery]);
 
     const handlePageChange = (page: number) => {
       setCurrentPage(page);
@@ -426,6 +628,149 @@ export default function ReportsPage() {
             )}
           </Card>
 
+          {/* Search Bar */}
+          <Card className="w-full border-0 shadow-sm">
+            <div className="p-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="Search by employee name, date, shift, location, or time..."
+                  className="w-full pl-10 pr-10"
+                />
+                {searchInput && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-1 top-1/2 transform -translate-y-1/2 h-6 w-6 p-0"
+                    onClick={() => setSearchInput("")}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+            </div>
+          </Card>
+
+          {/* Attendance Statistics Card - Show when date range is selected */}
+          {(filters.startDate || filters.endDate || filters.date) && !isLoading && (
+            <Card className="w-full border-0 shadow-sm bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border-blue-200 dark:border-blue-800">
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex-1">
+                    <h3 className="text-sm font-medium text-muted-foreground mb-1">
+                      Total Attendance Count
+                      {(filters.startDate && filters.endDate) && (
+                        <span className="ml-2 text-xs">
+                          ({format(new Date(filters.startDate), 'MMM dd, yyyy')} - {format(new Date(filters.endDate), 'MMM dd, yyyy')})
+                        </span>
+                      )}
+                      {filters.date && (
+                        <span className="ml-2 text-xs">
+                          ({format(filters.date, 'MMM dd, yyyy')})
+                        </span>
+                      )}
+                    </h3>
+                    <div className="space-y-2">
+                      {/* Unique Employee-Days Count */}
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-3xl sm:text-4xl font-bold text-blue-600 dark:text-blue-400">
+                          {displayCount.toLocaleString()}
+                        </span>
+                        <span className="text-sm text-muted-foreground">
+                          <span className="text-xs font-medium">Unique Employee-Days</span>
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        One employee counted once per day (regardless of shifts worked)
+                      </p>
+                      
+                      {/* Sum of Shift Totals */}
+                      {rangeShiftTotals.morning + rangeShiftTotals.evening + rangeShiftTotals.night !== displayCount && (
+                        <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-2xl sm:text-3xl font-bold text-indigo-600 dark:text-indigo-400">
+                              {(rangeShiftTotals.morning + rangeShiftTotals.evening + rangeShiftTotals.night).toLocaleString()}
+                            </span>
+                            <span className="text-sm text-muted-foreground">
+                              <span className="text-xs font-medium">Sum of Shift Totals</span>
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Employees counted per shift (if worked multiple shifts, counted multiple times)
+                          </p>
+                          <p className="text-xs text-orange-600 dark:text-orange-400 mt-1 font-medium">
+                            Difference: {(rangeShiftTotals.morning + rangeShiftTotals.evening + rangeShiftTotals.night) - displayCount} employees worked multiple shifts
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Shift Breakdown */}
+                  <div className="grid grid-cols-3 gap-3 sm:gap-4 w-full sm:w-auto">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-3 text-center border border-orange-200 dark:border-orange-800">
+                      <div className="text-xs font-medium text-muted-foreground mb-1">Morning</div>
+                      {rangeShiftTotals.loading ? (
+                        <Loader2 className="h-5 w-5 animate-spin mx-auto text-orange-600" />
+                      ) : (
+                        <div className="text-lg sm:text-xl font-bold text-orange-600 dark:text-orange-400">
+                          {rangeShiftTotals.morning.toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-3 text-center border border-purple-200 dark:border-purple-800">
+                      <div className="text-xs font-medium text-muted-foreground mb-1">Evening</div>
+                      {rangeShiftTotals.loading ? (
+                        <Loader2 className="h-5 w-5 animate-spin mx-auto text-purple-600" />
+                      ) : (
+                        <div className="text-lg sm:text-xl font-bold text-purple-600 dark:text-purple-400">
+                          {rangeShiftTotals.evening.toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-3 text-center border border-indigo-200 dark:border-indigo-800">
+                      <div className="text-xs font-medium text-muted-foreground mb-1">Night</div>
+                      {rangeShiftTotals.loading ? (
+                        <Loader2 className="h-5 w-5 animate-spin mx-auto text-indigo-600" />
+                      ) : (
+                        <div className="text-lg sm:text-xl font-bold text-indigo-600 dark:text-indigo-400">
+                          {rangeShiftTotals.night.toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Additional Info */}
+                <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <p className="font-medium text-muted-foreground mb-1">Unique Employee-Days:</p>
+                      <p className="text-blue-600 dark:text-blue-400 font-semibold">
+                        {displayCount.toLocaleString()}
+                      </p>
+                      <p className="text-muted-foreground mt-1">
+                        Each employee counted once per day
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-muted-foreground mb-1">Sum of Shift Totals:</p>
+                      <p className="text-indigo-600 dark:text-indigo-400 font-semibold">
+                        {(rangeShiftTotals.morning + rangeShiftTotals.evening + rangeShiftTotals.night).toLocaleString()}
+                      </p>
+                      <p className="text-muted-foreground mt-1">
+                        Morning ({rangeShiftTotals.morning.toLocaleString()}) + Evening ({rangeShiftTotals.evening.toLocaleString()}) + Night ({rangeShiftTotals.night.toLocaleString()})
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Reports Table Card */}
           <Card className="w-full border-0 shadow-sm overflow-hidden">
             {isLoading ? (
@@ -455,9 +800,24 @@ export default function ReportsPage() {
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3 flex-wrap">
                           <div className="flex flex-col">
-                            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                              Reports ({filteredReports.length}) {totalPages > 1 && `- Page ${currentPage} of ${totalPages}`}
-                            </h3>
+                          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                              Reports ({displayCount}) {totalPages > 1 && `- Page ${currentPage} of ${totalPages}`}
+                              {(rangeShiftTotals.morning + rangeShiftTotals.evening + rangeShiftTotals.night) !== uniqueEmployeeDaysCount && (
+                                <span className="text-xs text-muted-foreground mt-1 block">
+                                  (Sum of shifts: {(rangeShiftTotals.morning + rangeShiftTotals.evening + rangeShiftTotals.night).toLocaleString()})
+                                </span>
+                              )}
+                              {searchQuery && (
+                                <span className="text-sm font-normal text-blue-600 dark:text-blue-400 ml-2">
+                                  (searching: "{searchQuery}")
+                                </span>
+                              )}
+                              {filteredReports.length !== uniqueEmployeeDaysCount && (
+                                <span className="text-xs text-muted-foreground mt-1 block">
+                                  ({filteredReports.length} total records)
+                                </span>
+                              )}
+                          </h3>
                             {(filters.startDate || filters.endDate || filters.date) && (
                               <span className="text-xs text-muted-foreground mt-1">
                                 {filters.date 
@@ -959,7 +1319,8 @@ export default function ReportsPage() {
                     onRefresh={handleRefresh} 
                     disableActions={isReadonly}
                     loading={isLoading || isUpdating}
-                    totalCount={filteredReports.length}
+                    totalCount={displayCount}
+                    totalRecords={filteredReports.length}
                     currentPage={currentPage}
                     totalPages={totalPages}
                     dateFilter={{
@@ -982,7 +1343,7 @@ export default function ReportsPage() {
                     <div className="flex items-center justify-between px-6 py-4 border-t bg-white dark:bg-gray-900">
                       {/* Page Info */}
                       <div className="text-sm text-gray-700 dark:text-gray-300">
-                        Showing {startIndex + 1} to {Math.min(endIndex, filteredReports.length)} of {filteredReports.length} results
+                        Showing {startIndex + 1} to {Math.min(endIndex, displayCount)} of {displayCount} results
                       </div>
                       
                       {/* Pagination Controls */}

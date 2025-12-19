@@ -228,13 +228,14 @@ export const updateAttendance = async (req, res) => {
 
 export const bulkUpdateAttendance = async (req, res) => {
   try {
-    const { attendanceIds, stepIn, stepOut, shift } = req.body;
+    const { attendanceIds, stepIn, stepOut, shift, address } = req.body;
 
     console.log('Bulk update received:', { 
       attendanceIds: attendanceIds?.length, 
       stepIn, 
       stepOut, 
       shift,
+      address,
       stepInType: typeof stepIn,
       stepOutType: typeof stepOut,
       stepInIsNull: stepIn === null,
@@ -259,6 +260,7 @@ export const bulkUpdateAttendance = async (req, res) => {
       updateData.stepOut = stepOut === null ? null : new Date(stepOut);
     }
     if (shift !== undefined) updateData.shift = shift;
+    if (address !== undefined) updateData.address = address;
 
     console.log('Bulk update data to apply:', updateData);
 

@@ -204,14 +204,24 @@ export function SummaryReport() {
       });
       
       // Build attendance map exactly like Muster Roll does (using filtered records)
+      // CRITICAL: Keep only the LATEST record per employee per day (matching Attendance Reports logic)
       const attendanceMap = new Map<string, any>();
       monthlyAttendance.forEach((record: any) => {
+        if (!record?._id && !record?.id) return; // Skip invalid records
         const empId = record?.employeeId?._id || record?.employeeId || record?.employee?._id;
         const keyDate = record?.stepIn
           ? new Date(record.stepIn).toISOString().split("T")[0]
           : null;
         if (!empId || !keyDate) return;
-        attendanceMap.set(`${empId}_${keyDate}`, record);
+        
+        // Keep only the latest record per employee per day (deduplication)
+        const key = `${empId}_${keyDate}`;
+        const existing = attendanceMap.get(key);
+        const recordTimestamp = record?.stepIn ? new Date(record.stepIn).getTime() : 0;
+        const existingTimestamp = existing?.stepIn ? new Date(existing.stepIn).getTime() : 0;
+        if (!existing || recordTimestamp > existingTimestamp) {
+          attendanceMap.set(key, record);
+        }
       });
 
       // Now calculate exactly like Muster Roll: iterate through employees and count their present days
@@ -229,10 +239,13 @@ export function SummaryReport() {
         
         // Check each date in the range using Muster Roll's exact logic
         dateRange.forEach((date) => {
-          // Use Muster Roll's exact date construction: new Date(year, month, day)
+          // CRITICAL FIX: Use Date.UTC() to avoid timezone issues (same as Muster Roll)
+          // Format date directly from dateRange to ensure correct date string
+          const dateString = format(date, "yyyy-MM-dd");
+          
+          // Use UTC date construction for matching (same as Muster Roll's getAttendanceStatus)
           const day = date.getDate();
-          const targetDate = new Date(selectedYear, selectedMonth, day);
-          const dateString = targetDate.toISOString().split("T")[0];
+          const targetDate = new Date(Date.UTC(selectedYear, selectedMonth, day));
           
           // Use Muster Roll's exact map key format
           const mapKey = `${empId}_${dateString}`;
@@ -253,9 +266,10 @@ export function SummaryReport() {
               // Has stepOut = Present
               isPresent = true;
             } else if (record.stepIn && !record.stepOut) {
-              // Check if same day
-              const isSameDay = new Date(record.stepIn).toDateString() === targetDate.toDateString();
-              isPresent = isSameDay;
+              // Check if same day using UTC dates
+              const recordDate = new Date(record.stepIn);
+              const recordDateStr = recordDate.toISOString().split("T")[0];
+              isPresent = recordDateStr === dateString;
             }
             
             // Only count if present (status === "P")
