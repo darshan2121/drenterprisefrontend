@@ -492,31 +492,26 @@ export function SummaryReport() {
       nightTotal += summary.night?.presentEmployees || 0;
     });
 
-    // Calculate grand total using EXACT same method as Muster Roll
-    // Sum of _uniqueEmployeeDays (which is calculated the same way as Muster Roll's totalsByEmployee)
-    rangeSummaries.forEach(summary => {
-      grandTotal += summary._uniqueEmployeeDays || 0;
-    });
+    // Calculate grand total as sum of all shift totals
+    // This matches the daily total calculation (morning + evening + night)
+    grandTotal = morningTotal + eveningTotal + nightTotal;
 
     console.log("📊 SUMMARY REPORT - Totals Calculation:", {
       morning: morningTotal,
       evening: eveningTotal,
       night: nightTotal,
       grandTotal: grandTotal,
-      calculationMethod: "Sum of unique employee-days (matching Muster Roll's totalsByEmployee sum)",
-      dateRange: rangeSummaries.map(s => s.date),
-      uniqueCounts: rangeSummaries.map(s => ({ date: s.date, count: s._uniqueEmployeeDays }))
+      calculationMethod: "Sum of all shift totals (morning + evening + night)",
+      dateRange: rangeSummaries.map(s => s.date)
     });
 
     console.log("✅ SUMMARY REPORT - Grand Total:", grandTotal);
-    console.log("✅ SUMMARY REPORT - This total matches Muster Roll & Attendance Reports!");
-    console.log("✅ SUMMARY REPORT - All three reports now use the same data source (Redux) and calculation method!");
 
     return {
       morning: morningTotal,
       evening: eveningTotal,
       night: nightTotal,
-      total: grandTotal // Sum of unique employee-days, EXACTLY matching Muster Roll
+      total: grandTotal // Sum of all shift totals
     };
   };
 
@@ -538,7 +533,9 @@ export function SummaryReport() {
         Morning: summary.morning?.presentEmployees || 0,
         Evening: summary.evening?.presentEmployees || 0,
         Night: summary.night?.presentEmployees || 0,
-        Total: summary._uniqueEmployeeDays || 0,
+        Total: (summary.morning?.presentEmployees || 0) + 
+               (summary.evening?.presentEmployees || 0) + 
+               (summary.night?.presentEmployees || 0),
       }));
 
       // Add totals row
@@ -603,7 +600,9 @@ export function SummaryReport() {
         summary.morning?.presentEmployees || 0,
         summary.evening?.presentEmployees || 0,
         summary.night?.presentEmployees || 0,
-        summary._uniqueEmployeeDays || 0,
+        (summary.morning?.presentEmployees || 0) + 
+        (summary.evening?.presentEmployees || 0) + 
+        (summary.night?.presentEmployees || 0),
       ]);
 
       // Add totals row
@@ -794,8 +793,10 @@ export function SummaryReport() {
                   morning: summary.morning?.presentEmployees || 0,
                   evening: summary.evening?.presentEmployees || 0,
                   night: summary.night?.presentEmployees || 0,
-                  // Use unique employee-days count to match Muster Roll
-                  total: summary._uniqueEmployeeDays || 0
+                  // Total is sum of all three shifts
+                  total: (summary.morning?.presentEmployees || 0) + 
+                         (summary.evening?.presentEmployees || 0) + 
+                         (summary.night?.presentEmployees || 0)
                 };
 
                 return (
@@ -897,8 +898,10 @@ export function SummaryReport() {
                           morning: summary.morning?.presentEmployees || 0,
                           evening: summary.evening?.presentEmployees || 0,
                           night: summary.night?.presentEmployees || 0,
-                          // Use unique employee-days count to match Muster Roll
-                          total: summary._uniqueEmployeeDays || 0
+                          // Total is sum of all three shifts
+                          total: (summary.morning?.presentEmployees || 0) + 
+                                 (summary.evening?.presentEmployees || 0) + 
+                                 (summary.night?.presentEmployees || 0)
                         };
 
                         return (
