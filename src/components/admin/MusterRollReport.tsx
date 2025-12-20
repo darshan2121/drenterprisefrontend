@@ -104,12 +104,13 @@ export function MusterRollReport() {
 
   // Fetch attendance whenever month/year changes
   useEffect(() => {
-    const startDate = new Date(selectedYear, selectedMonth, 1)
-      .toISOString()
-      .split("T")[0];
-    const endDate = new Date(selectedYear, selectedMonth + 1, 0)
-      .toISOString()
-      .split("T")[0];
+    // CRITICAL FIX: Use local date components instead of toISOString() to avoid UTC conversion issues
+    // This ensures dates like Nov 30 are correctly included in the API request
+    const firstDayOfMonth = new Date(selectedYear, selectedMonth, 1);
+    const startDate = `${firstDayOfMonth.getFullYear()}-${String(firstDayOfMonth.getMonth() + 1).padStart(2, '0')}-${String(firstDayOfMonth.getDate()).padStart(2, '0')}`;
+    
+    const lastDayOfMonth = new Date(selectedYear, selectedMonth + 1, 0);
+    const endDate = `${lastDayOfMonth.getFullYear()}-${String(lastDayOfMonth.getMonth() + 1).padStart(2, '0')}-${String(lastDayOfMonth.getDate()).padStart(2, '0')}`;
 
     dispatch(fetchAttendance({ startDate, endDate, order: "asc" }));
   }, [dispatch, selectedMonth, selectedYear]);
@@ -172,19 +173,196 @@ export function MusterRollReport() {
 
   // Only keep attendance for the selected month/year
   // IMPORTANT: Filter out records without valid IDs (deleted records)
+  // CRITICAL: Convert UTC dates to IST before filtering
   const monthlyAttendance = useMemo(() => {
+    const nov30RawRecords: any[] = [];
+    const nov30FilteredRecords: any[] = [];
+    const lateNovRecords: any[] = []; // Records from Nov 29-30 and Dec 1
+    const dateDistribution = new Map<string, number>(); // Track date distribution
+    
     const filtered = attendanceArray.filter((record: any) => {
       // Skip records without valid IDs (deleted records)
       if (!record?._id && !record?.id) {
         return false;
       }
       if (!record?.stepIn) return false;
-      const date = new Date(record.stepIn);
-      return (
-        date.getMonth() === selectedMonth && date.getFullYear() === selectedYear
-      );
+      // Convert UTC date to IST before checking month/year
+      const stepInDate = new Date(record.stepIn);
+      // Get IST date components using toLocaleString
+      const istDateStr = stepInDate.toLocaleString("en-US", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+      const datePart = istDateStr.split(",")[0]; // "MM/DD/YYYY"
+      const [month, day, year] = datePart.split("/");
+      const istMonth = parseInt(month) - 1; // JavaScript months are 0-indexed
+      const istYear = parseInt(year);
+      const istDay = parseInt(day);
+      const dateKey = `${year}-${month}-${day}`;
+      
+      // Track date distribution
+      dateDistribution.set(dateKey, (dateDistribution.get(dateKey) || 0) + 1);
+      
+      // Track records near Nov 30 (Nov 29, 30, Dec 1) for debugging
+      if (istYear === 2025 && istMonth === 10 && istDay >= 29) {
+        lateNovRecords.push({
+          record,
+          stepIn: record.stepIn,
+          stepInUTC: record.stepIn,
+          stepInIST: istDateStr,
+          extractedDate: dateKey,
+          extractedMonth: istMonth,
+          extractedYear: istYear,
+          extractedDay: istDay,
+          selectedMonth: selectedMonth,
+          selectedYear: selectedYear,
+          matches: istMonth === selectedMonth && istYear === selectedYear
+        });
+      }
+      if (istYear === 2025 && istMonth === 11 && istDay === 1) {
+        // Check if this Dec 1 record might actually be Nov 30 in UTC
+        const utcDate = new Date(record.stepIn);
+        const utcYear = utcDate.getUTCFullYear();
+        const utcMonth = utcDate.getUTCMonth(); // 0-indexed
+        const utcDay = utcDate.getUTCDate();
+        const isNov30UTC = utcYear === 2025 && utcMonth === 10 && utcDay === 30;
+        
+        lateNovRecords.push({
+          record,
+          stepIn: record.stepIn,
+          stepInUTC: record.stepIn,
+          stepInIST: istDateStr,
+          extractedDate: dateKey,
+          extractedMonth: istMonth,
+          extractedYear: istYear,
+          extractedDay: istDay,
+          selectedMonth: selectedMonth,
+          selectedYear: selectedYear,
+          matches: false,
+          note: "Dec 1 in IST - might be Nov 30 UTC",
+          isNov30UTC: isNov30UTC,
+          utcDate: `${utcYear}-${String(utcMonth + 1).padStart(2, '0')}-${String(utcDay).padStart(2, '0')}`
+        });
+      }
+      
+      // Also check for records that are Nov 30 in UTC but might be Dec 1 in IST
+      const utcDate = new Date(record.stepIn);
+      const utcYear = utcDate.getUTCFullYear();
+      const utcMonth = utcDate.getUTCMonth(); // 0-indexed
+      const utcDay = utcDate.getUTCDate();
+      if (utcYear === 2025 && utcMonth === 10 && utcDay === 30) {
+        // This is Nov 30 in UTC - check what it is in IST
+        if (!(istYear === 2025 && istMonth === 10 && istDay === 30)) {
+          // It's NOT Nov 30 in IST, so it must be Dec 1
+          lateNovRecords.push({
+            record,
+            stepIn: record.stepIn,
+            stepInUTC: record.stepIn,
+            stepInIST: istDateStr,
+            extractedDate: dateKey,
+            extractedMonth: istMonth,
+            extractedYear: istYear,
+            extractedDay: istDay,
+            selectedMonth: selectedMonth,
+            selectedYear: selectedYear,
+            matches: false,
+            note: "Nov 30 in UTC but Dec 1 in IST - should be included for November",
+            isNov30UTC: true,
+            utcDate: `${utcYear}-${String(utcMonth + 1).padStart(2, '0')}-${String(utcDay).padStart(2, '0')}`
+          });
+        }
+      }
+      
+      // Track Nov 30 records for debugging
+      if (istYear === 2025 && istMonth === 10 && istDay === 30) {
+        nov30RawRecords.push({
+          record,
+          stepIn: record.stepIn,
+          stepInIST: istDateStr,
+          extractedMonth: istMonth,
+          extractedYear: istYear,
+          extractedDay: day,
+          selectedMonth: selectedMonth,
+          selectedYear: selectedYear,
+          matches: istMonth === selectedMonth && istYear === selectedYear
+        });
+      }
+      
+      const matches = istMonth === selectedMonth && istYear === selectedYear;
+      
+      if (matches && istYear === 2025 && istMonth === 10 && istDay === 30) {
+        nov30FilteredRecords.push(record);
+      }
+      
+      return matches;
     });
+    
+    // Sort date distribution
+    const sortedDates = Array.from(dateDistribution.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-5); // Last 5 dates
+    
     console.log(`📊 Filtered monthlyAttendance: ${attendanceArray.length} -> ${filtered.length} records (removed ${attendanceArray.length - filtered.length} invalid/deleted)`);
+    console.log(`🔍 MUSTER ROLL - Nov 30 records in raw data:`, {
+      count: nov30RawRecords.length,
+      sampleRecords: nov30RawRecords.slice(0, 5),
+      note: "These should be included if month=10 (November) and year=2025"
+    });
+    // Group late Nov records by extracted date
+    const lateNovByDate = new Map<string, any[]>();
+    lateNovRecords.forEach(r => {
+      const date = r.extractedDate;
+      if (!lateNovByDate.has(date)) {
+        lateNovByDate.set(date, []);
+      }
+      lateNovByDate.get(date)!.push(r);
+    });
+    
+    // Check for Nov 30 UTC records that appear as Dec 1 IST
+    const nov30UTCButDec1IST = lateNovRecords.filter(r => r.isNov30UTC && r.note?.includes("Nov 30 in UTC but Dec 1 in IST"));
+    
+    console.log(`🔍 MUSTER ROLL - Late Nov/Early Dec records (Nov 29-30, Dec 1 in IST):`, {
+      totalCount: lateNovRecords.length,
+      byDate: Array.from(lateNovByDate.entries()).map(([date, records]) => ({
+        date,
+        count: records.length,
+        sampleRecord: records[0],
+        isNov30UTC: records.some(r => r.isNov30UTC)
+      })),
+      nov30UTCButDec1IST: {
+        count: nov30UTCButDec1IST.length,
+        sampleRecords: nov30UTCButDec1IST.slice(0, 5),
+        note: "These are Nov 30 in UTC but Dec 1 in IST - should be included for November"
+      },
+      sampleRecords: lateNovRecords.slice(0, 10),
+      note: "Checking if Nov 30 records are being converted to Dec 1 or Nov 29"
+    });
+    console.log(`🔍 MUSTER ROLL - Last 5 dates in attendanceArray (IST):`, sortedDates);
+    console.log(`🔍 MUSTER ROLL - Nov 30 records after filter:`, {
+      count: nov30FilteredRecords.length,
+      sampleRecords: nov30FilteredRecords.slice(0, 5).map((r: any) => {
+        const stepInDate = new Date(r.stepIn);
+        const istDateStr = stepInDate.toLocaleString("en-US", {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit"
+        });
+        return {
+          stepIn: r.stepIn,
+          stepInIST: istDateStr,
+          shift: r.shift,
+          employeeId: r.employeeId?._id || r.employeeId
+        };
+      })
+    });
+    
     return filtered;
   }, [attendanceArray, selectedMonth, selectedYear]);
 
@@ -194,6 +372,9 @@ export function MusterRollReport() {
   // Also return a version number so React can detect changes to the Map
   const { attendanceMap, mapVersion } = useMemo(() => {
     const map = new Map<string, any>();
+    const datesInMap = new Set<string>();
+    const nov30Records: any[] = [];
+    
     console.log(`📊 Building attendanceMap from ${monthlyAttendance.length} records`);
     
     monthlyAttendance.forEach((record: any) => {
@@ -205,11 +386,40 @@ export function MusterRollReport() {
       
       const empId =
         record?.employeeId?._id || record?.employeeId || record?.employee?._id;
-      const keyDate = record?.stepIn
-        ? new Date(record.stepIn).toISOString().split("T")[0]
-        : null;
+      // CRITICAL FIX: Convert UTC date to IST before extracting date components
+      // MongoDB stores dates in UTC, but we need IST dates for matching
+      let keyDate: string | null = null;
+      if (record?.stepIn) {
+        const stepInDate = new Date(record.stepIn);
+        // Extract date components in IST timezone using toLocaleString
+        const istDateStr = stepInDate.toLocaleString("en-US", {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit"
+        });
+        // Format: "MM/DD/YYYY, HH:MM:SS AM/PM" -> extract date part
+        const datePart = istDateStr.split(",")[0]; // Get "MM/DD/YYYY"
+        const [month, day, year] = datePart.split("/");
+        keyDate = `${year}-${month}-${day}`;
+        
+        // Track Nov 30 records for debugging
+        if (keyDate === "2025-11-30") {
+          nov30Records.push({
+            record,
+            empId,
+            stepIn: record.stepIn,
+            stepInIST: istDateStr,
+            extractedDate: keyDate,
+            key: `${empId}_${keyDate}`
+          });
+        }
+      }
       if (!empId || !keyDate) return;
       
+      datesInMap.add(keyDate);
       const key = `${empId}_${keyDate}`;
       const existing = map.get(key);
       
@@ -224,6 +434,20 @@ export function MusterRollReport() {
     });
     
     console.log(`✅ Built attendanceMap with ${map.size} unique employee-days`);
+    console.log(`📊 Dates in attendanceMap:`, Array.from(datesInMap).sort());
+    console.log(`🔍 Nov 30 records found during map building:`, {
+      count: nov30Records.length,
+      sampleRecords: nov30Records.slice(0, 5),
+      allKeys: nov30Records.map(r => r.key)
+    });
+    
+    // Check if Nov 30 records are actually in the map
+    const nov30InMap = Array.from(map.entries()).filter(([key]) => key.includes("_2025-11-30"));
+    console.log(`🔍 Nov 30 records actually in attendanceMap:`, {
+      count: nov30InMap.length,
+      sampleKeys: nov30InMap.slice(0, 5).map(([key]) => key)
+    });
+    
     // Return map version (size) so React can detect changes
     return { attendanceMap: map, mapVersion: map.size };
   }, [monthlyAttendance]);
@@ -258,18 +482,49 @@ export function MusterRollReport() {
   };
 
   const getAttendanceStatus = (employeeId: string, day: number): AttendanceStatus => {
-    // Use UTC date to avoid timezone issues - match the format used in attendanceMap
-    const date = new Date(Date.UTC(selectedYear, selectedMonth, day));
-    const dateString = date.toISOString().split("T")[0];
-    const record = attendanceMap.get(`${employeeId}_${dateString}`);
+    // Use IST date format to match the format used in attendanceMap
+    // Format: yyyy-MM-dd in IST timezone
+    const year = selectedYear;
+    const month = String(selectedMonth + 1).padStart(2, '0');
+    const dayStr = String(day).padStart(2, '0');
+    const dateString = `${year}-${month}-${dayStr}`;
+    // Create date object for status checking (using local date)
+    const date = new Date(selectedYear, selectedMonth, day);
+    const mapKey = `${employeeId}_${dateString}`;
+    const record = attendanceMap.get(mapKey);
+    
+    // Debug logging for Nov 30
+    if (day === 30 && selectedMonth === 10 && selectedYear === 2025) {
+      console.log(`🔍 MUSTER ROLL - Looking up day 30 for employee ${employeeId}:`, {
+        mapKey,
+        found: !!record,
+        record: record ? {
+          stepIn: record.stepIn,
+          stepInIST: new Date(record.stepIn).toLocaleString("en-US", {
+            timeZone: "Asia/Kolkata",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit"
+          }),
+          shift: record.shift,
+          status: record.status
+        } : null,
+        allKeysForEmployee: Array.from(attendanceMap.keys()).filter(k => k.startsWith(`${employeeId}_`))
+      });
+    }
+    
     return getStatusFromRecord(record, date);
   };
 
   // Get attendance record for a specific employee and day
   const getAttendanceRecord = (employeeId: string, day: number) => {
-    // Use UTC date to avoid timezone issues - match the format used in attendanceMap
-    const date = new Date(Date.UTC(selectedYear, selectedMonth, day));
-    const dateString = date.toISOString().split("T")[0];
+    // Use IST date format to match the format used in attendanceMap
+    const year = selectedYear;
+    const month = String(selectedMonth + 1).padStart(2, '0');
+    const dayStr = String(day).padStart(2, '0');
+    const dateString = `${year}-${month}-${dayStr}`;
     return attendanceMap.get(`${employeeId}_${dateString}`);
   };
 
