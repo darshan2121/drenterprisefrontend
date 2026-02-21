@@ -12,14 +12,15 @@ import employeeRoutes from './routes/employee.routes.js';
 import dashboardRoutes from "./routes/dashboard.routes.js";
 import attendenceRoutes from "./routes/attendence.routes.js"
 import { autoStepOut } from './controller/cron.controller.js';
+import { forgotPassword } from './controller/auth.controller.js';
 
 dotenv.config();
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5678;
 const MONGO_URI = process.env.MONGODB_URI ;
 app.use(cors(
     {
-        origin: '*', // Allow all origins, you can restrict this to specific domains
+        origin: "*", // Allow all origins, you can restrict this to specific domains
         methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
         credentials: true,
     }

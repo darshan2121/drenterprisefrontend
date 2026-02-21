@@ -4,7 +4,7 @@ import Manager from "../models/manager.models.js";
 
 export const authenticateUser = async (req, res, next) => {
   const authHeader = req.headers.authorization;
-  console.log("authHeader",authHeader)
+  // console.log("[AUTH] Incoming Authorization header:", authHeader);
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({ message: "No token provided" });
@@ -14,7 +14,7 @@ export const authenticateUser = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-console.log("decoded",decoded)
+    // console.log("[AUTH] Decoded JWT user:", decoded);
     let user;
     if (decoded.userType === "admin") {
       user = await Admin.findById(decoded.id);

@@ -36,6 +36,11 @@ const attendanceSchema = new Schema({
   address: {
     type: String
   },
+   shift : {
+    type: String,
+    enum: ['morning', 'evening', 'night'],
+    required: true
+  }, 
   note: {
     type: String // Optional: note for attendance
   }

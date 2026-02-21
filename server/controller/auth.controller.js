@@ -27,32 +27,54 @@ export const forgotPassword = async (req, res) => {
 
     if (!user) return res.status(404).json({ message: `${userType} not found` });
 
-    // Email setup
+
     const transporter = nodemailer.createTransport({
-      service: "gmail", // or SMTP config
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
+  host: "smtp.hostinger.com",
+  port: 465, // or 587 (for TLS)
+  secure: true, // true for port 465, false for port 587
+  auth: {
+    user: process.env.EMAIL_USER  ,
+    pass: process.env.EMAIL_PASS, // or App Password if set
+  },
+});
+
 
     const mailOptions = {
       from: `"YourApp Support" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: "Your OTP for Password Reset",
       html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #eee; border-radius: 8px; background: #f9f9f9;">
-          <h2 style="color: #333;">Password Reset Request</h2>
-          <p>Use the following OTP to reset your password:</p>
-          <div style="font-size: 24px; font-weight: bold; color: #2d89ff; margin: 20px 0;">${otp}</div>
-          <p>This OTP is valid for 10 minutes.</p>
-          <p>If you didn’t request this, you can ignore this email.</p>
-          <p style="margin-top: 30px; font-size: 14px; color: #999;">© YourApp Team</p>
-        </div>
+     <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ddd; border-radius: 10px; background-color: #ffffff; max-width: 600px; margin: auto;">
+  <h2 style="color: #2d2d2d; font-size: 22px;">🔐 Password Reset Request</h2>
+  
+  <p style="font-size: 16px; color: #555;">
+    Hello,<br />
+    We received a request to reset your password for your <strong>DREnterprice</strong> account.
+  </p>
+
+  <p style="font-size: 16px; color: #555;">Use the OTP below to reset your password:</p>
+
+  <div style="font-size: 28px; font-weight: bold; color: #2d89ff; background: #f0f4ff; padding: 15px; border-radius: 6px; text-align: center; letter-spacing: 4px; margin: 20px 0;">
+    ${otp}
+  </div>
+
+  <p style="font-size: 14px; color: #888;">This OTP is valid for <strong>10 minutes</strong>. Please do not share it with anyone.</p>
+
+  <p style="font-size: 14px; color: #888;">If you didn’t request a password reset, you can safely ignore this email.</p>
+
+  <hr style="margin: 30px 30px; border: none; border-top: 1px solid #eee;" />
+
+  <div style="text-align: center; font-size: 13px; color: #aaa;">
+    &copy; ${new Date().getFullYear()} DREnterprice. All rights reserved.<br />
+  
+  </div>
+</div>
+
       `,
     };
 
     await transporter.sendMail(mailOptions);
+    console.log(mailOptions)
 
     res.status(200).json({ message: "OTP sent to your email" });
 

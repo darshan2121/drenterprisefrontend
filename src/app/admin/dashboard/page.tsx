@@ -7,56 +7,19 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
-
-const metrics = [
-  {
-    icon: Users,
-    label: "Total Users",
-    value: "1,234",
-    growth: "+12%",
-    color: "text-emerald-500",
-  },
-  {
-    icon: UserCog,
-    label: "Total Managers",
-    value: "56",
-    growth: "+5%",
-    color: "text-emerald-500",
-  },
-  {
-    icon: Briefcase,
-    label: "Total Employees",
-    value: "1,178",
-    growth: "+8%",
-    color: "text-emerald-500",
-  },
-    {
-    icon: Activity,
-    label: "Active Today",
-    value: "892",
-    growth: "+2%",
-    color: "text-emerald-500",
-  },
-];
-
-const recentActivity = [
-  { name: 'John Doe', action: 'clocked in', time: '9:00 AM', status: 'success' as const },
-  { name: 'Jane Smith', action: 'requested leave', time: '8:45 AM', status: 'pending' as const },
-  { name: 'Mike Johnson', action: 'clocked out', time: '8:30 AM', status: 'success' as const },
-  { name: 'Sarah Wilson', action: 'late arrival', time: '8:15 AM', status: 'warning' as const },
-];
+import { useEffect, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { fetchDashboard } from "@/store/slices/dashboardSlice";
+import type { AppDispatch, RootState } from "@/store";
+import Image from "next/image";
+import { authService } from "@/services/authService";
+import { useRouter } from "next/navigation";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 
 const quickActions = [
-  { title: 'Add New Employee', description: 'Create employee profile', href: '/admin/employees', icon: UserPlus, className: "bg-blue-100 dark:bg-blue-900/50 hover:bg-blue-200/70 dark:hover:bg-blue-900/80 border border-blue-200 dark:border-blue-800" },
-  { title: 'Generate Report', description: 'Export attendance data', href: '/admin/reports', icon: FileTextIcon, className: "bg-emerald-100 dark:bg-emerald-900/50 hover:bg-emerald-200/70 dark:hover:bg-emerald-900/80" },
-  { title: 'Manage Shifts', description: 'Update work schedules', href: '#', icon: CalendarClock, className: "bg-purple-100 dark:bg-purple-900/50 hover:bg-purple-200/70 dark:hover:bg-purple-900/80" },
+  { title: 'Add New Employee', description: 'Create employee profile', href: '/admin/employees', icon: UserPlus, className: "bg-blue-50 dark:bg-blue-950 hover:bg-blue-100 dark:hover:bg-blue-900 border border-blue-200 dark:border-blue-800" },
+  { title: 'Generate Report', description: 'Export attendance data', href: '/admin/reports', icon: FileTextIcon, className: "bg-emerald-50 dark:bg-emerald-950 hover:bg-emerald-100 dark:hover:bg-emerald-900 border border-emerald-200 dark:border-emerald-800" },
 ];
-
-const chartData = [
-  { status: "Present", count: 750, fill: "hsl(var(--chart-2))", icon: CheckCircle2 },
-  { status: "On Leave", count: 120, fill: "hsl(var(--chart-4))", icon: CalendarOff },
-  { status: "Absent", count: 22, fill: "hsl(var(--chart-1))", icon: UserX },
-]
 
 const chartConfig = {
   count: {
@@ -76,109 +39,219 @@ const chartConfig = {
   },
 }
 
-export default function AdminDashboardPage() {
-  return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-3xl font-bold font-headline">Dashboard</h1>
-        <p className="text-muted-foreground">
-          Welcome, Admin! Here&apos;s an overview of your platform.
-        </p>
-      </div>
+function isAdminAuthenticated() {
+  if (typeof window === "undefined") return false;
+  return !!localStorage.getItem("adminToken");
+}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {metrics.map((metric) => (
-          <Card key={metric.label} className="transition-all duration-300 ease-in-out hover:shadow-lg">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">
-                {metric.label}
+export default function AdminDashboardPage() {
+  const router = useRouter();
+  const [checking, setChecking] = useState(true);
+  const [isAuthed, setIsAuthed] = useState(false);
+  const dispatch = useDispatch<AppDispatch>();
+  const { totalEmployees, totalManagers, workingEmployees, shiftWise, isLoading } = useSelector((state: RootState) => state.dashboard);
+  const isReadonly = authService.getCurrentUser()?.role === "readonly";
+
+  useEffect(() => {
+    if (!isAdminAuthenticated()) {
+      setIsAuthed(false);
+      setChecking(false);
+      router.replace("/admin/login");
+    } else {
+      setIsAuthed(true);
+      setChecking(false);
+    }
+  }, [router]);
+
+  useEffect(() => {
+    if (isAuthed) {
+      dispatch(fetchDashboard());
+    }
+  }, [dispatch, isAuthed]);
+
+  // Redirect readonly users to reports
+  useEffect(() => {
+    if (isReadonly) {
+      router.replace("/admin/reports");
+    }
+  }, [isReadonly, router]);
+
+  if (checking || !isAuthed) {
+    return (
+      <div className="flex justify-center items-center min-h-screen px-4">
+        <span className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></span>
+      </div>
+    );
+  }
+
+  const metrics = [
+    {
+      icon: Users,
+      label: "Total Employees",
+      value: totalEmployees,
+      growth: "",
+      color: "text-emerald-500",
+    },
+    {
+      icon: UserCog,
+      label: "Total Supervisors",
+      value: totalManagers,
+      growth: "",
+      color: "text-blue-500",
+    },
+    {
+      icon: Briefcase,
+      label: "Working Employees",
+      value: workingEmployees,
+      growth: "",
+      color: "text-purple-500",
+    },
+    {
+      icon: Activity,
+      label: "Night Shift",
+      value: shiftWise.night ?? 0,
+      growth: "",
+      color: "text-orange-500",
+    },
+  ];
+
+  const chartData = [
+    { status: "Morning", count: shiftWise.morning ?? 0, fill: "hsl(var(--chart-2))", icon: CheckCircle2 },
+    { status: "Evening", count: shiftWise.evening ?? 0, fill: "hsl(var(--chart-3))", icon: Activity },
+    { status: "Night", count: shiftWise.night ?? 0, fill: "hsl(var(--chart-4))", icon: CalendarOff },
+  ];
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+      {/* Mobile-first container with proper padding */}
+      <div className="w-full max-w-7xl mx-auto px-3 py-4 space-y-4 sm:px-6 lg:px-8">
+        
+        {/* Header Section */}
+        <div className="mb-6">
+          <AdminPageHeader
+            title="Dashboard"
+            subtitle="Welcome, Admin! Here's an overview of your platform."
+          />
+        </div>
+
+        {/* Metrics Cards Grid - Responsive */}
+        <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          {isLoading ? (
+            <div className="col-span-full flex justify-center items-center py-12">
+              <Image 
+                src="/dr-enterprise-logo.png" 
+                alt="D.R. Enterprise Logo" 
+                width={60} 
+                height={60} 
+                className="animate-pulse" 
+              />
+            </div>
+          ) : (
+            metrics.map((metric, index) => (
+              <Card key={metric.label} className="w-full transition-all duration-200 hover:shadow-md border-0 shadow-sm">
+                <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+                  <CardTitle className="text-sm font-medium text-gray-700 dark:text-gray-300 leading-tight">
+                    {metric.label}
+                  </CardTitle>
+                  <metric.icon className={cn("h-4 w-4 flex-shrink-0", metric.color)} />
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                    {metric.value}
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </div>
+
+        {/* Chart Section - Full width on mobile */}
+        <div className="w-full">
+          <Card className="w-full border-0 shadow-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                <BarChart3 className="h-5 w-5 text-blue-600" />
+                Shift-wise Attendance
               </CardTitle>
-              <metric.icon className="h-5 w-5 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{metric.value}</div>
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <span className={`${metric.color} font-semibold flex items-center`}>
-                    <ArrowUpRight className="h-4 w-4 mr-1" />
-                    {metric.growth}
-                </span>
-                from last month
-              </p>
+              {isLoading ? (
+                <div className="flex justify-center items-center py-12 text-gray-500">
+                  Loading chart...
+                </div>
+              ) : (
+                <div className="w-full">
+                  <ChartContainer config={chartConfig} className="w-full h-[200px] sm:h-[250px] md:h-[300px]">
+                    <BarChart data={chartData} accessibilityLayer margin={{ left: 20, right: 20, top: 20, bottom: 5 }}>
+                      <CartesianGrid vertical={false} strokeDasharray="3 3" opacity={0.3} />
+                      <XAxis
+                        dataKey="status"
+                        tickLine={false}
+                        tickMargin={10}
+                        axisLine={false}
+                        fontSize={12}
+                        className="text-gray-600 dark:text-gray-400"
+                      />
+                      <YAxis 
+                        fontSize={12} 
+                        className="text-gray-600 dark:text-gray-400"
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <ChartTooltip
+                        cursor={{ fill: 'rgba(0,0,0,0.1)' }}
+                        content={
+                          <ChartTooltipContent
+                            indicator="dot"
+                            labelKey="status"
+                            nameKey="count"
+                          />
+                        }
+                      />
+                      <Bar dataKey="count" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ChartContainer>
+                </div>
+              )}
             </CardContent>
           </Card>
-        ))}
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        <Card className="lg:col-span-3">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5" />
-              Today's Attendance Overview
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-             <ChartContainer config={chartConfig} className="w-full h-[250px]">
-                <BarChart data={chartData} accessibilityLayer>
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    dataKey="status"
-                    tickLine={false}
-                    tickMargin={10}
-                    axisLine={false}
-                    tickFormatter={(value) => value.slice(0, 10)}
-                  />
-                  <YAxis />
-                  <ChartTooltip
-                    cursor={false}
-                    content={
-                      <ChartTooltipContent
-                        indicator="dot"
-                        labelKey="status"
-                        nameKey="count"
-                      />
-                    }
-                  />
-                  <Bar dataKey="count" radius={4} />
-                </BarChart>
-              </ChartContainer>
-          </CardContent>
-        </Card>
-        <Card className="lg:col-span-2">
-            <CardHeader>
-                <CardTitle>Recent Activity</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                {recentActivity.map((activity, index) => (
-                    <div key={index} className="flex items-center justify-between text-sm">
-                        <div>
-                            <p className="font-medium">{activity.name}</p>
-                            <p className="text-muted-foreground">{activity.action}</p>
-                        </div>
-                        <div className="text-right">
-                            <p className="text-muted-foreground">{activity.time}</p>
-                             <Badge variant={activity.status} className="mt-1 capitalize">{activity.status}</Badge>
-                        </div>
-                    </div>
-                ))}
-            </CardContent>
-        </Card>
-      </div>
-       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <CardHeader className="md:col-span-3 p-0">
-                <CardTitle>Quick Actions</CardTitle>
-            </CardHeader>
-            {quickActions.map((action) => (
-                <Link href={action.href} key={action.title} className={cn("block p-4 rounded-lg transition-colors", action.className)}>
-                    <div className="flex items-start gap-3">
-                         <action.icon className="h-6 w-6 text-muted-foreground mt-1" />
-                        <div>
-                            <p className="font-semibold text-base">{action.title}</p>
-                            <p className="text-sm text-muted-foreground">{action.description}</p>
-                        </div>
-                    </div>
-                </Link>
-            ))}
         </div>
+
+        {/* Quick Actions Section */}
+        {!isReadonly && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 px-1">
+              Quick Actions
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {quickActions.map((action) => (
+                <Link 
+                  href={action.href} 
+                  key={action.title} 
+                  className={cn(
+                    "block p-4 rounded-xl transition-all duration-200 hover:scale-[1.02] border",
+                    action.className
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0">
+                      <action.icon className="h-6 w-6 text-gray-600 dark:text-gray-400" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
+                        {action.title}
+                      </p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
+                        {action.description}
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
