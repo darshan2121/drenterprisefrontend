@@ -19,18 +19,27 @@ console.log("eightHoursAgo",eightHoursAgo)
     console.log("Eight hours ago:", eightHoursAgo);
     console.log("Matched records:", records.map(r => r._id));
     for (const attendance of records) {
-        // Use server time (IST) for stepOutTime
-      const stepOutTime = getCurrentISTTime();
+      // Logic: step-out after 8 hours from step-in, with randomization (-15 to 0 minutes)
+      const eightHoursInMs = 8 * 60 * 60 * 1000;
+      const targetStepOut = new Date(attendance.stepIn.getTime() + eightHoursInMs);
+      
+      // Subtract random offset (0 to 15 minutes) + (0 to 59 seconds)
+      const randMinusMinutes = Math.floor(Math.random() * 16); // 0 to 15
+      const randMinusSeconds = Math.floor(Math.random() * 60);
+      const randMinusMillis = Math.floor(Math.random() * 1000);
+      
+      const stepOutTime = new Date(targetStepOut.getTime() - (randMinusMinutes * 60 * 1000) - (randMinusSeconds * 1000) - randMinusMillis);
+      
       const totalTime = Math.round((stepOutTime - attendance.stepIn) / 60000);
 
       attendance.stepOut = stepOutTime;
       attendance.totalTime = totalTime;
-      attendance.note = attendance.note || "Auto stepped out after 8 hours";
+      attendance.note = attendance.note || `Auto stepped out (Randomized: ${totalTime} mins)`;
       await attendance.save();
 
       await Employee.findByIdAndUpdate(attendance.employeeId, { isWorking: false });
 
-      console.log(`Auto-stepped out: ${attendance.employeeId}`);
+      console.log(`Auto-stepped out: ${attendance.employeeId} at ${stepOutTime.toISOString()}`);
     }
   } catch (error) {
     console.error("Auto step-out failed:", error);
@@ -119,17 +128,24 @@ export const autoStepIn = async () => {
         // Get random location for this employee
         const randomLocation = randomLocations[Math.floor(Math.random() * randomLocations.length)];
 
-        // Create attendance record
-        const stepIn = getCurrentISTTime();
+        // Create attendance record with randomization (0 to 30 minutes after shift start)
+        const baseShiftTime = new Date(now);
+        baseShiftTime.setHours(currentHour, 0, 0, 0);
+        
+        const randInMinutes = Math.floor(Math.random() * 31); // 0 to 30
+        const randInSeconds = Math.floor(Math.random() * 60);
+        const randInMillis = Math.floor(Math.random() * 1000);
+        
+        const stepInTime = new Date(baseShiftTime.getTime() + (randInMinutes * 60 * 1000) + (randInSeconds * 1000) + randInMillis);
+        
         const attendance = new Attendance({
           employeeId: employee._id,
-          managerId: employee.managerId, // Use employee's managerId so managers can see them
-          stepIn,
-          stepInImage: null, // No image for auto step-in
-          stepInLongitude: 0, // Default coordinates
+          managerId: employee.managerId,
+          stepIn: stepInTime,
+          stepInImage: null,
+          stepInLongitude: 0,
           stepInLatitude: 0,
           stepInAddress: randomLocation,
-          // Keep legacy fields for backward compatibility
           longitude: 0,
           latitude: 0,
           address: randomLocation,
@@ -143,7 +159,7 @@ export const autoStepIn = async () => {
         await Employee.findByIdAndUpdate(employee._id, { isWorking: true });
 
         steppedInCount++;
-        console.log(`Auto-stepped in: ${employee.name} (${employee._id}) for ${currentShift} shift at ${randomLocation}`);
+        console.log(`Auto-stepped in: ${employee.name} (${employee._id}) for ${currentShift} shift at ${stepInTime.toISOString()} (${randomLocation})`);
       } catch (error) {
         console.error(`Error processing employee ${employee.name} (${employee._id}):`, error);
       }
