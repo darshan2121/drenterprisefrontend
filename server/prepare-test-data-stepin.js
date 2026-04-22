@@ -8,6 +8,17 @@ import dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
+const getISTStartOfDay = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  return new Date(`${map.year}-${map.month}-${map.day}T00:00:00.000+05:30`);
+};
+
 // Safety check: Detect database type
 const checkDatabaseSafety = () => {
   const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/labor-management';
@@ -156,8 +167,7 @@ const prepareTestData = async () => {
   }
   
   // Delete today's auto step-in records to allow re-testing
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
+  const todayStart = getISTStartOfDay(now);
   
   const autoStepInRecords = await Attendance.find({
     stepIn: { $gte: todayStart },

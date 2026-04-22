@@ -3,6 +3,30 @@ import Attendance from "../models/attendence.models.js";
 import Employee from "../models/employee.models.js";
 import { getCurrentISTTime, getHoursAgoInIST, getCurrentISTHour } from "../utils/timeUtils.js";
 
+const pad2 = (n) => String(n).padStart(2, "0");
+
+/**
+ * Returns today's date in IST formatted as YYYY-MM-DD.
+ * This is used to build ISO timestamps with an explicit +05:30 offset,
+ * avoiding reliance on the server's local timezone.
+ */
+const getISTDateYYYYMMDD = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const map = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  return `${map.year}-${map.month}-${map.day}`;
+};
+
+const getISTStartOfDay = (date = new Date()) => {
+  const ymd = getISTDateYYYYMMDD(date);
+  return new Date(`${ymd}T00:00:00.000+05:30`);
+};
+
 // Run every 30 minutes
 export const autoStepOut = async () => {
   console.log("Running auto-step-out check...");
@@ -51,7 +75,13 @@ export const autoStepIn = async () => {
   console.log("Running auto-step-in check...");
 
   const now = getCurrentISTTime();
-  const currentHour = getCurrentISTHour(); // Get hour in IST (0-23)
+  const overrideHourRaw = process.env.AUTO_STEPIN_TEST_HOUR;
+  const overrideHour =
+    overrideHourRaw !== undefined && overrideHourRaw !== null && overrideHourRaw !== ""
+      ? Number(overrideHourRaw)
+      : null;
+
+  const currentHour = Number.isInteger(overrideHour) ? overrideHour : getCurrentISTHour(); // Get hour in IST (0-23)
   
   // Define shift start times and their corresponding shifts
   const shiftStartTimes = {
@@ -80,8 +110,7 @@ export const autoStepIn = async () => {
 
   try {
     // Get start of today in IST for duplicate checking
-    const todayStart = new Date(now);
-    todayStart.setHours(0, 0, 0, 0);
+    const todayStart = getISTStartOfDay(now);
     
     // Find employees assigned to this shift who:
     // 1. Are not currently working (isWorking: false)
@@ -128,15 +157,31 @@ export const autoStepIn = async () => {
         // Get random location for this employee
         const randomLocation = randomLocations[Math.floor(Math.random() * randomLocations.length)];
 
-        // Create attendance record with randomization (0 to 30 minutes after shift start)
-        const baseShiftTime = new Date(now);
-        baseShiftTime.setHours(currentHour, 0, 0, 0);
-        
-        const randInMinutes = Math.floor(Math.random() * 31); // 0 to 30
-        const randInSeconds = Math.floor(Math.random() * 60);
-        const randInMillis = Math.floor(Math.random() * 1000);
-        
-        const stepInTime = new Date(baseShiftTime.getTime() + (randInMinutes * 60 * 1000) + (randInSeconds * 1000) + randInMillis);
+        // Create attendance record with randomization within a safe window:
+        // - Step-in is after shift start (IST)
+        // - Step-in is never in the future relative to 'now'
+        // - Max randomization window is 30 minutes from shift start
+        const istYmd = getISTDateYYYYMMDD(now);
+        const baseShiftTime = new Date(`${istYmd}T${pad2(currentHour)}:00:00.000+05:30`);
+
+        // If the cron happens before the shift starts (edge cases / clock drift), do nothing.
+        if (now < baseShiftTime) {
+          console.log(
+            `Now (${now.toISOString()}) is before shift start (${baseShiftTime.toISOString()}). Skipping employee ${employee.name} (${employee._id}).`,
+          );
+          skippedCount++;
+          continue;
+        }
+
+        const maxWindowMs = 30 * 60 * 1000;
+        const elapsedSinceShiftStartMs = now.getTime() - baseShiftTime.getTime();
+        const allowedWindowMs = Math.min(maxWindowMs, Math.max(0, elapsedSinceShiftStartMs));
+
+        // Randomize anywhere between [0, allowedWindowMs], with ms resolution
+        const randOffsetMs =
+          allowedWindowMs === 0 ? 0 : Math.floor(Math.random() * (allowedWindowMs + 1));
+
+        const stepInTime = new Date(baseShiftTime.getTime() + randOffsetMs);
         
         const attendance = new Attendance({
           employeeId: employee._id,

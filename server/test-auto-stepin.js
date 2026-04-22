@@ -8,6 +8,17 @@ import dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 
+const getISTStartOfDay = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  return new Date(`${map.year}-${map.month}-${map.day}T00:00:00.000+05:30`);
+};
+
 // Safety check: Detect database type
 const checkDatabaseSafety = () => {
   const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/labor-management';
@@ -205,8 +216,7 @@ const testAutoStepIn = async (forceShift = null) => {
     }
     
     // Check if already auto-stepped-in today
-    const todayStart = new Date(now);
-    todayStart.setHours(0, 0, 0, 0);
+    const todayStart = getISTStartOfDay(now);
     
     const todayAttendance = await Attendance.findOne({
       employeeId: employee._id,
@@ -298,6 +308,8 @@ const forceShift = shiftArg && validShifts.includes(shiftArg.toLowerCase()) ? sh
 
 if (forceShift) {
   console.log(`\n🔧 Force testing ${forceShift} shift (ignoring current time)`);
+  // Allow the cron function to run outside real shift hour (test-only override)
+  process.env.AUTO_STEPIN_TEST_HOUR = forceShift === 'morning' ? '7' : forceShift === 'evening' ? '15' : '23';
 }
 
 // Run the test

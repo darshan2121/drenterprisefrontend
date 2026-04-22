@@ -8,13 +8,91 @@ import { getCurrentISTTime, getHoursAgoInIST } from './utils/timeUtils.js';
 // Load environment variables
 dotenv.config();
 
-// Database connection
-const connectDB = async () => {
+// Safety check: Detect database type
+const checkDatabaseSafety = () => {
+  const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/labor-management';
+  
+  // Check if it's a cloud MongoDB (production)
+  const isCloudDB = mongoUri.includes('mongodb+srv://') || 
+                    mongoUri.includes('mongodb.net') ||
+                    mongoUri.includes('atlas');
+  
+  // Check if it's local MongoDB
+  const isLocalDB = mongoUri.includes('localhost') || 
+                    mongoUri.includes('127.0.0.1') ||
+                    mongoUri.startsWith('mongodb://localhost');
+  
+  // Extract database name for display
+  let dbName = 'Unknown';
   try {
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/labor-management');
-    console.log('Connected to MongoDB');
+    if (mongoUri.includes('mongodb+srv://')) {
+      const match = mongoUri.match(/mongodb\+srv:\/\/[^/]+\/([^?]+)/);
+      dbName = match ? match[1] : 'Unknown';
+    } else if (mongoUri.includes('mongodb://')) {
+      const match = mongoUri.match(/mongodb:\/\/[^/]+\/([^?]+)/);
+      dbName = match ? match[1] : 'Unknown';
+    }
+  } catch (e) {
+    // Ignore parsing errors
+  }
+  
+  return {
+    uri: mongoUri,
+    isCloudDB,
+    isLocalDB,
+    dbName,
+    isProduction: isCloudDB || process.env.NODE_ENV === 'production'
+  };
+};
+
+// Database connection with safety checks
+const connectDB = async () => {
+  const dbInfo = checkDatabaseSafety();
+  
+  console.log('\n' + '='.repeat(60));
+  console.log('🔍 DATABASE CONNECTION CHECK');
+  console.log('='.repeat(60));
+  console.log(`📊 Database Type: ${dbInfo.isCloudDB ? '☁️  CLOUD (MongoDB Atlas)' : dbInfo.isLocalDB ? '💻 LOCAL' : '❓ UNKNOWN'}`);
+  console.log(`📝 Database Name: ${dbInfo.dbName}`);
+  console.log(`🌐 Connection: ${dbInfo.isCloudDB ? 'Production/Cloud' : 'Local'}`);
+  
+  // Show masked URI (hide credentials)
+  const maskedUri = dbInfo.uri.replace(/mongodb\+srv:\/\/[^:]+:[^@]+@/, 'mongodb+srv://***:***@')
+                                .replace(/mongodb:\/\/[^:]+:[^@]+@/, 'mongodb://***:***@');
+  console.log(`🔗 URI: ${maskedUri}`);
+  
+  if (dbInfo.isProduction) {
+    console.log('\n⚠️  WARNING: You are connecting to a PRODUCTION/CLOUD database!');
+    console.log('⚠️  This test will modify real data!');
+    console.log('\n🛑 To use LOCAL database:');
+    console.log('   1. Set MONGODB_URI=mongodb://localhost:27017/labor-management in .env');
+    console.log('   2. Or use: mongodb://127.0.0.1:27017/labor-management');
+    console.log('\n💡 For safety, this script will exit.');
+    console.log('   If you really want to test on production, set FORCE_PRODUCTION=true');
+    
+    if (process.env.FORCE_PRODUCTION !== 'true') {
+      console.log('\n❌ Exiting for safety...');
+      process.exit(1);
+    } else {
+      console.log('\n⚠️  FORCE_PRODUCTION=true detected. Proceeding with caution...');
+    }
+  } else {
+    console.log('\n✅ Safe to proceed - Local database detected');
+  }
+  
+  console.log('='.repeat(60) + '\n');
+  
+  try {
+    await mongoose.connect(dbInfo.uri);
+    console.log('✅ Connected to MongoDB');
+    
+    // Show actual database name after connection
+    const db = mongoose.connection.db;
+    if (db) {
+      console.log(`📊 Connected to database: ${db.databaseName}`);
+    }
   } catch (error) {
-    console.error('Database connection error:', error);
+    console.error('❌ Database connection error:', error);
     process.exit(1);
   }
 };
