@@ -22,9 +22,50 @@ const getISTDateYYYYMMDD = (date = new Date()) => {
   return `${map.year}-${map.month}-${map.day}`;
 };
 
+const getCurrentISTMinute = (date = new Date()) => {
+  const istMinute = parseInt(
+    date.toLocaleString("en-US", {
+      timeZone: "Asia/Kolkata",
+      minute: "2-digit",
+      hour12: false,
+    }),
+    10,
+  );
+  return istMinute;
+};
+
 const getISTStartOfDay = (date = new Date()) => {
   const ymd = getISTDateYYYYMMDD(date);
   return new Date(`${ymd}T00:00:00.000+05:30`);
+};
+
+const hashStringToUint32 = (str) => {
+  let h = 2166136261; // FNV-1a base
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+};
+
+/**
+ * Deterministic seeded RNG.
+ * Each draw hashes `${seed}|${counter}` to produce independent values.
+ */              
+const seededRng = (seed) => {
+  let counter = 0;
+
+  const nextUint32 = () => hashStringToUint32(`${seed}|${counter++}`);
+
+  const nextInt = (minInclusive, maxInclusive) => {
+    const min = Math.ceil(minInclusive);
+    const max = Math.floor(maxInclusive);
+    if (max < min) throw new Error(`seededRng.nextInt invalid range: ${min}..${max}`);
+    const span = max - min + 1;
+    return min + (nextUint32() % span);
+  };
+
+  return { nextUint32, nextInt };
 };
 
 // Run every 30 minutes
@@ -33,6 +74,7 @@ export const autoStepOut = async () => {
 
   const now = getCurrentISTTime();
   const eightHoursAgo = getHoursAgoInIST(8);
+  const istYmd = getISTDateYYYYMMDD(now);
 console.log("eightHoursAgo",eightHoursAgo)
   try {
     const records = await Attendance.find({
@@ -48,9 +90,10 @@ console.log("eightHoursAgo",eightHoursAgo)
       const targetStepOut = new Date(attendance.stepIn.getTime() + eightHoursInMs);
       
       // Subtract random offset (0 to 15 minutes) + (0 to 59 seconds)
-      const randMinusMinutes = Math.floor(Math.random() * 16); // 0 to 15
-      const randMinusSeconds = Math.floor(Math.random() * 60);
-      const randMinusMillis = Math.floor(Math.random() * 1000);
+      const rng = seededRng(`${attendance.employeeId.toString()}|${istYmd}|stepout`);
+      const randMinusMinutes = rng.nextInt(0, 15);
+      const randMinusSeconds = rng.nextInt(0, 59);
+      const randMinusMillis = rng.nextInt(0, 999);
       
       const stepOutTime = new Date(targetStepOut.getTime() - (randMinusMinutes * 60 * 1000) - (randMinusSeconds * 1000) - randMinusMillis);
       
@@ -82,6 +125,7 @@ export const autoStepIn = async () => {
       : null;
 
   const currentHour = Number.isInteger(overrideHour) ? overrideHour : getCurrentISTHour(); // Get hour in IST (0-23)
+  const currentMinute = getCurrentISTMinute(now);
   
   // Define shift start times and their corresponding shifts
   const shiftStartTimes = {
@@ -95,6 +139,15 @@ export const autoStepIn = async () => {
   
   if (!currentShift) {
     console.log(`Current hour (${currentHour}) is not a shift start time. Skipping auto step-in.`);
+    return;
+  }
+
+  // We only randomize within the first 30 minutes of shift start.
+  // If we run later (cron runs every minute during the shift hour), skip to avoid late auto step-ins.
+  if (currentMinute > 30) {
+    console.log(
+      `Current time is ${currentHour}:${pad2(currentMinute)} IST (outside first 30 minutes). Skipping auto step-in.`,
+    );
     return;
   }
 
@@ -155,16 +208,14 @@ export const autoStepIn = async () => {
         }
 
         // Get random location for this employee
-        const randomLocation = randomLocations[Math.floor(Math.random() * randomLocations.length)];
-
-        // Create attendance record with randomization within a safe window:
-        // - Step-in is after shift start (IST)
-        // - Step-in is never in the future relative to 'now'
-        // - Max randomization window is 30 minutes from shift start
         const istYmd = getISTDateYYYYMMDD(now);
+        const locationRng = seededRng(`${employee._id.toString()}|${istYmd}|${currentShift}|location`);
+        const randomLocation = randomLocations[locationRng.nextInt(0, randomLocations.length - 1)];
+
+        // Deterministic target time per employee per day per shift (0..30 minutes after shift start),
+        // so repeated runs don't keep changing the planned time.
         const baseShiftTime = new Date(`${istYmd}T${pad2(currentHour)}:00:00.000+05:30`);
 
-        // If the cron happens before the shift starts (edge cases / clock drift), do nothing.
         if (now < baseShiftTime) {
           console.log(
             `Now (${now.toISOString()}) is before shift start (${baseShiftTime.toISOString()}). Skipping employee ${employee.name} (${employee._id}).`,
@@ -173,15 +224,26 @@ export const autoStepIn = async () => {
           continue;
         }
 
-        const maxWindowMs = 30 * 60 * 1000;
-        const elapsedSinceShiftStartMs = now.getTime() - baseShiftTime.getTime();
-        const allowedWindowMs = Math.min(maxWindowMs, Math.max(0, elapsedSinceShiftStartMs));
+        const rng = seededRng(`${employee._id.toString()}|${istYmd}|${currentShift}|stepin`);
+        const offsetMinutes = rng.nextInt(0, 30);
+        const offsetSeconds = rng.nextInt(0, 59);
+        const offsetMillis = rng.nextInt(0, 999);
 
-        // Randomize anywhere between [0, allowedWindowMs], with ms resolution
-        const randOffsetMs =
-          allowedWindowMs === 0 ? 0 : Math.floor(Math.random() * (allowedWindowMs + 1));
+        const stepInTime = new Date(
+          baseShiftTime.getTime() +
+            offsetMinutes * 60 * 1000 +
+            offsetSeconds * 1000 +
+            offsetMillis,
+        );
 
-        const stepInTime = new Date(baseShiftTime.getTime() + randOffsetMs);
+        // Never create future step-ins; wait until the target time has arrived.
+        if (now < stepInTime) {
+          console.log(
+            `Employee ${employee.name} (${employee._id}) target step-in ${stepInTime.toISOString()} not reached yet. Skipping for now.`,
+          );
+          skippedCount++;
+          continue;
+        }
         
         const attendance = new Attendance({
           employeeId: employee._id,

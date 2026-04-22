@@ -55,8 +55,9 @@ cron.schedule("*/30 * * * *", autoStepOut, {
   timezone: "Asia/Kolkata"
 });
 
-// Run every 1 hour - Auto step-in at shift start times (7 AM, 3 PM, 11 PM)
-cron.schedule("0 * * * *", autoStepIn, {
+// Run every minute during shift hours (IST). The controller will only act in the first 30 minutes
+// and will create records only when the employee's randomized target time has been reached.
+cron.schedule("*/1 7,15,23 * * *", autoStepIn, {
   timezone: "Asia/Kolkata"
 });
 
