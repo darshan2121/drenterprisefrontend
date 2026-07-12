@@ -13,6 +13,7 @@ export interface Employee {
   shift: string;
   managerId: string;
   isWorking: boolean;
+  enableAutoPunch?: boolean;
   image?: string;
   createdAt: string;
   updatedAt: string;
@@ -133,6 +134,15 @@ const employeeSlice = createSlice({
   reducers: {
     clearEmployeeError: (state) => { state.error = null; },
     clearEmployeeSuccess: (state) => { state.successMessage = null; },
+    patchEmployeeLocal: (
+      state,
+      action: PayloadAction<{ id: string; changes: Partial<Employee> }>,
+    ) => {
+      const { id, changes } = action.payload;
+      state.employees = state.employees.map((emp) =>
+        emp._id === id ? { ...emp, ...changes } : emp,
+      );
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -168,7 +178,19 @@ const employeeSlice = createSlice({
       })
       .addCase(editEmployee.fulfilled, (state, action: PayloadAction<Employee>) => {
         state.isLoading = false;
-        state.employees = state.employees.map(emp => emp._id === action.payload._id ? action.payload : emp);
+        if (!action.payload?._id) return;
+        state.employees = state.employees.map((emp) => {
+          if (emp._id !== action.payload._id) return emp;
+          const merged = { ...emp, ...action.payload };
+          // Keep local auto-punch value if API omits the field (old backend)
+          if (
+            action.payload.enableAutoPunch === undefined &&
+            emp.enableAutoPunch !== undefined
+          ) {
+            merged.enableAutoPunch = emp.enableAutoPunch;
+          }
+          return merged;
+        });
       })
       .addCase(editEmployee.rejected, (state, action) => {
         state.isLoading = false;
@@ -203,5 +225,5 @@ const employeeSlice = createSlice({
   },
 });
 
-export const { clearEmployeeError, clearEmployeeSuccess } = employeeSlice.actions;
+export const { clearEmployeeError, clearEmployeeSuccess, patchEmployeeLocal } = employeeSlice.actions;
 export default employeeSlice.reducer;

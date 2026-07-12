@@ -29,7 +29,7 @@ import { editEmployee } from "@/store/slices/employeeSlice";
 import Image from "next/image";
 import { getApiUrl } from "@/lib/config";
 
-type Employee = { id: string; name: string; email: string; managerId: string; shift: string; isWorking: boolean; };
+type Employee = { id: string; name: string; email: string; managerId: string; shift: string; isWorking: boolean; enableAutoPunch?: boolean; };
 type Manager = { _id: string; name: string; };
 
 export function EditEmployeeModal({ employee, managers = [], onRefresh, ...props }: { employee: Employee; managers: Manager[]; onRefresh?: () => void }) {
@@ -55,6 +55,7 @@ export function EditEmployeeModal({ employee, managers = [], onRefresh, ...props
   );
   const [shift, setShift] = useState(employee.shift);
   const [isWorking, setIsWorking] = useState(employee.isWorking);
+  const [enableAutoPunch, setEnableAutoPunch] = useState(employee.enableAutoPunch !== false);
 
   const stopCamera = useCallback(() => {
     if (stream) {
@@ -82,6 +83,7 @@ export function EditEmployeeModal({ employee, managers = [], onRefresh, ...props
       setEmail(employee.email);
       setShift(employee.shift);
       setIsWorking(employee.isWorking);
+      setEnableAutoPunch(employee.enableAutoPunch !== false);
       // Defensive: fallback to first manager if not found or empty
       const found = managers.find(m => String(m._id) === String(employee.managerId));
       setManagerId(found ? String(employee.managerId) : (managers[0]?._id ? String(managers[0]._id) : ''));
@@ -216,6 +218,7 @@ export function EditEmployeeModal({ employee, managers = [], onRefresh, ...props
       formData.append('managerId', String(managerId));
       formData.append('shift', backendShift);
       formData.append('isWorking', String(isWorking));
+      formData.append('enableAutoPunch', String(enableAutoPunch));
 
       // Use the API function that handles FormData
       const response = await fetch(`${getApiUrl()}/employee/${employee.id}`, {
@@ -242,6 +245,7 @@ export function EditEmployeeModal({ employee, managers = [], onRefresh, ...props
           managerId: String(managerId),
           shift: backendShift,
           isWorking,
+          enableAutoPunch,
           ...(result.employee?.image && { image: result.employee.image })
         }
       }) as any);
@@ -386,11 +390,18 @@ export function EditEmployeeModal({ employee, managers = [], onRefresh, ...props
                 <SelectValue placeholder="Select a shift" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="morning">9 AM - 5 PM</SelectItem>
-                <SelectItem value="evening">1 PM - 9 PM</SelectItem>
-                <SelectItem value="night">5 PM - 1 AM</SelectItem>
+                <SelectItem value="morning">1st · Morning (7 AM)</SelectItem>
+                <SelectItem value="evening">2nd · Evening (3 PM)</SelectItem>
+                <SelectItem value="night">3rd · Night (11 PM)</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="autoPunch" className="text-right">Auto punch</Label>
+            <div className="col-span-3 flex items-center space-x-2">
+              <Switch id="autoPunch" checked={enableAutoPunch} onCheckedChange={setEnableAutoPunch} disabled={isLoading} />
+              <Label htmlFor="autoPunch">{enableAutoPunch ? 'Included in auto punch' : 'Excluded from auto punch'}</Label>
+            </div>
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="status" className="text-right">Status</Label>

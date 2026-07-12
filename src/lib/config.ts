@@ -1,4 +1,5 @@
 // Manual switch: set to true for local development, false for production
+// Use local backend so enableAutoPunch saves correctly (same MongoDB via server/.env)
 const USE_LOCAL_BACKEND = false;
 
 // API Configuration

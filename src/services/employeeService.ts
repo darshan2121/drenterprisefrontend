@@ -23,6 +23,7 @@ export interface Employee {
   shift: string;
   managerId: string;
   isWorking: boolean;
+  enableAutoPunch?: boolean;
   image?: string;
   createdAt: string;
   updatedAt: string;

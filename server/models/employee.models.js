@@ -32,6 +32,11 @@ default:""
     type: Boolean,
     default: false
   },
+  // When false, cron auto step-in skips this employee
+  enableAutoPunch: {
+    type: Boolean,
+    default: true
+  },
   image: {
     type: String,
     default: null

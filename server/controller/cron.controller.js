@@ -171,7 +171,8 @@ export const autoStepIn = async () => {
     // 3. Haven't been auto-stepped-in today for this shift
     const employees = await Employee.find({
       shift: currentShift,
-      isWorking: false
+      isWorking: false,
+      enableAutoPunch: { $ne: false }
     });
 
     console.log(`Found ${employees.length} employees for ${currentShift} shift`);

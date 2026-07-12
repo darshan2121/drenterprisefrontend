@@ -5,18 +5,26 @@ import { Card } from "@/components/ui/card";
 import { AddEmployeeModal } from "@/components/admin/AddEmployeeModal";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { fetchEmployees } from "@/store/slices/employeeSlice";
+import { fetchEmployees, removeEmployee, editEmployee, patchEmployeeLocal } from "@/store/slices/employeeSlice";
 import { fetchManagers } from "@/store/slices/managerSlice";
 import type { AppDispatch, RootState } from "@/store";
 import Image from "next/image";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
-import { Users, Mail, UserCheck, Clock, MoreVertical } from "lucide-react";
+import { Users, UserCheck, Clock } from "lucide-react";
 import { getApiUrl } from "@/lib/config";
 import { Button } from "@/components/ui/button";
 import { EditEmployeeModal } from "@/components/admin/EditEmployeeModal";
 import { useToast } from "@/hooks/use-toast";
-import { removeEmployee } from "@/store/slices/employeeSlice";
 import { DebouncedSearch } from "@/components/ui/debounced-search";
+import { Switch } from "@/components/ui/switch";
+import { updateEmployee } from "@/lib/api";
+import {
+  AUTO_PUNCH_TARGETS,
+  SHIFT_LABELS,
+  getAutoPunchCounts,
+  isAutoPunchEnabled,
+  type AutoPunchShift,
+} from "@/lib/autoPunchTargets";
 
 export default function EmployeesPage() {
   const { toast } = useToast();
@@ -27,6 +35,13 @@ export default function EmployeesPage() {
   const [itemsPerPage] = useState(10);
   const [searchTerm, setSearchTerm] = useState('');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [selectedShift, setSelectedShift] = useState<AutoPunchShift | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [adminId, setAdminId] = useState("");
+
+  useEffect(() => {
+    setAdminId(localStorage.getItem("adminId") || "");
+  }, []);
   
   // Pagination state
   // const [currentPage, setCurrentPage] = useState(1);
@@ -82,8 +97,13 @@ export default function EmployeesPage() {
     dispatch(fetchManagers());
   }, [dispatch]);
 
-  // Filter employees based on search term
-  const filteredEmployees = employees.filter(emp => {
+  // Filter by search + optional shift (auto-punch ON only when a shift card is selected)
+  const filteredEmployees = employees.filter((emp) => {
+    if (selectedShift) {
+      if (emp.shift !== selectedShift) return false;
+      if (!isAutoPunchEnabled(emp)) return false;
+    }
+
     if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
     return (
@@ -93,20 +113,90 @@ export default function EmployeesPage() {
     );
   });
 
-  const employeesList = filteredEmployees.map(emp => ({
+  const employeesList = filteredEmployees.map((emp) => ({
     id: emp._id,
     name: emp.name,
     email: emp.email,
-    managerId: typeof emp.managerId === 'string'
+    managerId: typeof emp.managerId === "string"
       ? emp.managerId
-      : ((emp.managerId as any)?._id || ''),
-    manager: '',
+      : ((emp.managerId as any)?._id || ""),
+    manager: "",
     isWorking: emp.isWorking,
-    status: emp.isWorking ? 'Active' : ('On Leave' as 'On Leave' | 'Active' | 'Terminated'),
+    enableAutoPunch: emp.enableAutoPunch !== false,
+    status: emp.isWorking ? "Active" : ("On Leave" as "On Leave" | "Active" | "Terminated"),
     shift: emp.shift,
     _raw: emp,
   }));
   const managersList = managers;
+
+  const autoPunchCounts = useMemo(
+    () => getAutoPunchCounts(employees),
+    [employees],
+  );
+
+  const handleShiftFilterClick = (shift: AutoPunchShift) => {
+    setSelectedShift((prev) => (prev === shift ? null : shift));
+    setCurrentPage(1);
+  };
+
+  const handleToggleAutoPunch = async (employee: {
+    id: string;
+    name: string;
+    enableAutoPunch?: boolean;
+  }) => {
+    const previousValue = isAutoPunchEnabled(employee);
+    const nextValue = !previousValue;
+    setTogglingId(employee.id);
+
+    // Update UI immediately so counts change right away
+    dispatch(
+      patchEmployeeLocal({
+        id: employee.id,
+        changes: { enableAutoPunch: nextValue },
+      }),
+    );
+
+    try {
+      // JSON body (not FormData) so boolean is saved correctly
+      const res: any = await updateEmployee(employee.id, {
+        enableAutoPunch: nextValue,
+      });
+
+      const saved = res?.employee;
+      if (saved?._id) {
+        dispatch(
+          patchEmployeeLocal({
+            id: employee.id,
+            changes: {
+              ...saved,
+              // Force the value we set — old APIs may omit this field
+              enableAutoPunch: nextValue,
+            },
+          }),
+        );
+      }
+
+      toast({
+        title: nextValue ? "Auto punch enabled" : "Auto punch disabled",
+        description: `${employee.name}: count updated (${nextValue ? "+1" : "-1"}).`,
+      });
+    } catch (error: any) {
+      // Revert UI if API failed
+      dispatch(
+        patchEmployeeLocal({
+          id: employee.id,
+          changes: { enableAutoPunch: previousValue },
+        }),
+      );
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update auto punch. Is the new backend deployed?",
+        variant: "destructive",
+      });
+    } finally {
+      setTogglingId(null);
+    }
+  };
 
   const handleDelete = async (employee: any) => {
     try {
@@ -123,23 +213,16 @@ export default function EmployeesPage() {
   const endIndex = startIndex + itemsPerPage;
   const currentEmployees = employeesList.slice(startIndex, endIndex);
 
-  // Reset to first page when employees change
+  // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [employeesList.length]);
+  }, [employeesList.length, selectedShift, searchTerm]);
 
   // Handle page change
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
-    // Scroll to top when page changes
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
-  // Get adminId from localStorage if available
-  let adminId = "";
-  if (typeof window !== "undefined") {
-    adminId = localStorage.getItem("adminId") || "";
-  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
@@ -162,6 +245,114 @@ export default function EmployeesPage() {
               onClear={() => setSearchTerm('')}
               debounceDelay={300}
             />
+          </div>
+
+          {/* Totals + shift filters */}
+          <div className="mt-4 space-y-3">
+            <div className="rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Total employees
+                </div>
+                <div className="mt-1 text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                  {employees.length}
+                </div>
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Auto punch on:{" "}
+                <span className="font-semibold text-gray-900 dark:text-gray-100">
+                  {autoPunchCounts.morning + autoPunchCounts.evening + autoPunchCounts.night}
+                </span>
+                {" · "}
+                Showing:{" "}
+                <span className="font-semibold text-gray-900 dark:text-gray-100">
+                  {employeesList.length}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {([
+                ["morning", "1st shift"],
+                ["evening", "2nd shift"],
+                ["night", "3rd shift"],
+              ] as const).map(([shift, label]) => {
+                const count = autoPunchCounts[shift];
+                const target = AUTO_PUNCH_TARGETS[shift];
+                const over = count > target;
+                const under = count < target;
+                const isSelected = selectedShift === shift;
+                return (
+                  <button
+                    type="button"
+                    key={shift}
+                    onClick={() => handleShiftFilterClick(shift)}
+                    aria-pressed={isSelected}
+                    className={`relative rounded-xl border-2 px-4 py-3 text-left transition ${
+                      isSelected
+                        ? "border-blue-600 bg-blue-600 text-white shadow-md scale-[1.01]"
+                        : "border-gray-200 bg-white text-gray-900 hover:border-blue-300 hover:bg-blue-50/60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:border-blue-500"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div
+                        className={`text-xs font-semibold uppercase tracking-wide ${
+                          isSelected ? "text-blue-100" : "text-muted-foreground"
+                        }`}
+                      >
+                        {label}
+                      </div>
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                          isSelected
+                            ? "bg-white text-blue-700"
+                            : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                        }`}
+                      >
+                        {isSelected ? "Selected" : "Tap to filter"}
+                      </span>
+                    </div>
+                    <div className={`mt-1 text-2xl font-bold ${isSelected ? "text-white" : ""}`}>
+                      {count}
+                      <span className={`text-base font-medium ${isSelected ? "text-blue-100" : "text-muted-foreground"}`}>
+                        {" "}/ {target} target
+                      </span>
+                    </div>
+                    <div className={`text-xs mt-1 ${isSelected ? "text-blue-100" : "text-muted-foreground"}`}>
+                      {SHIFT_LABELS[shift]}
+                      {" · "}
+                      {over ? "over target" : under ? "under target" : "on target"}
+                    </div>
+                    {!isSelected && (
+                      <div className="mt-2 text-[11px] text-blue-600 dark:text-blue-400">
+                        Shows auto-punch On only
+                      </div>
+                    )}
+                    {isSelected && (
+                      <div className="mt-2 text-[11px] font-medium text-white/90">
+                        Filtering auto-punch On · click again to clear
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {selectedShift && (
+              <div className="flex items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm dark:border-blue-800 dark:bg-blue-950/40">
+                <span className="text-blue-900 dark:text-blue-100">
+                  Filter active: <strong>{SHIFT_LABELS[selectedShift]}</strong> · auto-punch On only
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-blue-300 bg-white hover:bg-blue-50"
+                  onClick={() => setSelectedShift(null)}
+                >
+                  Show all employees
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -259,19 +450,25 @@ export default function EmployeesPage() {
                               <div>
                                 <span className="text-gray-500 dark:text-gray-400">Shift:</span>
                                 <div className="font-medium text-gray-900 dark:text-gray-100">
-                                  {employee.shift === 'morning' ? '7 AM - 3 PM (Morning)' :
-                                   employee.shift === 'evening' ? '2 PM - 10 PM (Evening)' :
-                                   employee.shift === 'night' ? '10 PM - 7 AM (Night)' :
-                                   employee.shift || 'Regular'}
+                                  {SHIFT_LABELS[employee.shift as keyof typeof SHIFT_LABELS] ||
+                                    employee.shift ||
+                                    "Regular"}
                                 </div>
                               </div>
                             </div>
                             <div className="flex items-center space-x-2">
                               <UserCheck className="h-4 w-4 text-gray-400" />
-                              <div>
-                                <span className="text-gray-500 dark:text-gray-400">Working:</span>
-                                <div className="font-medium text-gray-900 dark:text-gray-100">
-                                  {employee.isWorking ? 'Yes' : 'No'}
+                              <div className="flex-1">
+                                <span className="text-gray-500 dark:text-gray-400">Auto punch:</span>
+                                <div className="mt-1 flex items-center gap-2">
+                                  <Switch
+                                    checked={isAutoPunchEnabled(employee)}
+                                    disabled={togglingId === employee.id}
+                                    onCheckedChange={() => handleToggleAutoPunch(employee)}
+                                  />
+                                  <span className="font-medium text-gray-900 dark:text-gray-100">
+                                    {isAutoPunchEnabled(employee) ? "On" : "Off"}
+                                  </span>
                                 </div>
                               </div>
                             </div>
@@ -370,7 +567,13 @@ export default function EmployeesPage() {
 
               {/* Desktop Table Layout */}
               <div className="hidden sm:block">
-                <EmployeesList employees={employeesList} managers={managersList} onRefresh={() => dispatch(fetchEmployees())} />
+                <EmployeesList
+                  employees={employeesList}
+                  managers={managersList}
+                  onRefresh={() => dispatch(fetchEmployees())}
+                  onToggleAutoPunch={handleToggleAutoPunch}
+                  togglingId={togglingId}
+                />
               </div>
             </div>
           )}

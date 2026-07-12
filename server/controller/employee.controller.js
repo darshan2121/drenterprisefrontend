@@ -89,10 +89,26 @@ export const updateEmployee = async (req, res) => {
       updateData.image = req.file.filename; // or full URL if needed
     }
 
+    // FormData sends booleans as strings
+    if (updateData.enableAutoPunch !== undefined) {
+      updateData.enableAutoPunch =
+        updateData.enableAutoPunch === true ||
+        updateData.enableAutoPunch === "true" ||
+        updateData.enableAutoPunch === 1 ||
+        updateData.enableAutoPunch === "1";
+    }
+    if (updateData.isWorking !== undefined) {
+      updateData.isWorking =
+        updateData.isWorking === true ||
+        updateData.isWorking === "true" ||
+        updateData.isWorking === 1 ||
+        updateData.isWorking === "1";
+    }
+
     const updatedEmployee = await Employee.findByIdAndUpdate(
       req.params.id,
-      updateData,
-      { new: true }
+      { $set: updateData },
+      { new: true, runValidators: true }
     );
 
     if (!updatedEmployee) {

@@ -39,6 +39,8 @@ import { useToast } from "@/hooks/use-toast";
 import { authService } from "@/services/authService";
 import Image from "next/image";
 import { getApiUrl, API_CONFIG } from "@/lib/config";
+import { SHIFT_LABELS, isAutoPunchEnabled } from "@/lib/autoPunchTargets";
+import { Switch } from "@/components/ui/switch";
 
 type Employee = { 
   id: string; 
@@ -49,6 +51,7 @@ type Employee = {
   shift: string; 
   managerId: string; 
   isWorking: boolean;
+  enableAutoPunch?: boolean;
   image?: string;
   _raw?: {
     _id: string;
@@ -63,6 +66,7 @@ type Employee = {
     };
     shift: string;
     isWorking: boolean;
+    enableAutoPunch?: boolean;
     image: string;
     isCreatedByAdmin: boolean;
     createdAt: string;
@@ -71,7 +75,19 @@ type Employee = {
 };
 type Manager = { _id: string; name: string; };
 
-export function EmployeesList({ employees, managers, onRefresh }: { employees: Employee[], managers: Manager[]; onRefresh?: () => void }) {
+export function EmployeesList({
+  employees,
+  managers,
+  onRefresh,
+  onToggleAutoPunch,
+  togglingId,
+}: {
+  employees: Employee[];
+  managers: Manager[];
+  onRefresh?: () => void;
+  onToggleAutoPunch?: (employee: Employee) => void;
+  togglingId?: string | null;
+}) {
   const isMobile = useIsMobile();
   const dispatch = useDispatch();
   const { toast } = useToast();
@@ -202,6 +218,21 @@ export function EmployeesList({ employees, managers, onRefresh }: { employees: E
               <CardContent className="space-y-2 text-sm sm:text-base">
                 <p className="truncate"><strong className="text-muted-foreground">Email:</strong> {employee.email}</p>
                 <p className="truncate"><strong className="text-muted-foreground">Manager:</strong> {getManagerName(employee.managerId)}</p>
+                <p className="truncate">
+                  <strong className="text-muted-foreground">Shift:</strong>{" "}
+                  {SHIFT_LABELS[employee.shift as keyof typeof SHIFT_LABELS] || employee.shift}
+                </p>
+                <p className="truncate">
+                  <strong className="text-muted-foreground">Auto punch:</strong>
+                </p>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={isAutoPunchEnabled(employee)}
+                    disabled={togglingId === employee.id || isReadonly || !onToggleAutoPunch}
+                    onCheckedChange={() => onToggleAutoPunch?.(employee)}
+                  />
+                  <span>{isAutoPunchEnabled(employee) ? "On" : "Off"}</span>
+                </div>
                 <div className="flex flex-col sm:flex-row gap-2 pt-2">
                   {!isReadonly && <EditEmployeeModal employee={employee} managers={managers} onRefresh={onRefresh} />}
                   {!isReadonly && <DeleteAction employee={employee} onDelete={handleDelete} />}
@@ -309,6 +340,8 @@ export function EmployeesList({ employees, managers, onRefresh }: { employees: E
               <TableHead className="hidden md:table-cell min-w-[100px]">ID</TableHead>
               <TableHead className="hidden lg:table-cell min-w-[180px]">Email</TableHead>
               <TableHead className="hidden md:table-cell min-w-[140px]">Assigned Manager</TableHead>
+              <TableHead className="min-w-[120px]">Shift</TableHead>
+              <TableHead className="min-w-[100px]">Auto punch</TableHead>
               <TableHead className="min-w-[80px]">Status</TableHead>
               <TableHead className="text-right min-w-[100px]">Actions</TableHead>
             </TableRow>
@@ -327,6 +360,21 @@ export function EmployeesList({ employees, managers, onRefresh }: { employees: E
                 <TableCell className="hidden md:table-cell text-muted-foreground truncate max-w-[100px]">{employee.id}</TableCell>
                 <TableCell className="hidden lg:table-cell text-muted-foreground truncate max-w-[180px]">{employee.email}</TableCell>
                 <TableCell className="hidden md:table-cell text-muted-foreground truncate max-w-[140px]">{getManagerName(employee.managerId)}</TableCell>
+                <TableCell className="text-sm">
+                  {SHIFT_LABELS[employee.shift as keyof typeof SHIFT_LABELS] || employee.shift}
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      checked={isAutoPunchEnabled(employee)}
+                      disabled={togglingId === employee.id || isReadonly || !onToggleAutoPunch}
+                      onCheckedChange={() => onToggleAutoPunch?.(employee)}
+                    />
+                    <Badge variant={isAutoPunchEnabled(employee) ? "default" : "outline"}>
+                      {isAutoPunchEnabled(employee) ? "On" : "Off"}
+                    </Badge>
+                  </div>
+                </TableCell>
                 <TableCell>
                   <Badge variant={getStatusVariant(employee.status)}>
                     {employee.status}
